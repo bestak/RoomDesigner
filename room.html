@@ -118,6 +118,10 @@ select,input,textarea{background:var(--panel);border:1px solid var(--line);borde
 .p-label{font:600 8.5px var(--sans);pointer-events:none;text-anchor:middle;dominant-baseline:middle}
 .p-clear{fill:rgba(47,111,106,.10);stroke:var(--accent);stroke-width:.8;stroke-dasharray:3 2;pointer-events:none}
 
+/* 3D-only view: the top bar (layout, style) stays, plan and side panel hide */
+body.focus3d .work{grid-template-columns:minmax(0,1fr);height:calc(100% - 64px)}
+body.focus3d .work > .pane:first-child, body.focus3d .side{display:none}
+body.focus3d .pane{height:auto}
 @media (max-width:1100px){
   .work{grid-template-columns:minmax(0,1fr) minmax(0,1fr);height:auto}
   .pane{height:75vh}
@@ -177,6 +181,7 @@ select,input,textarea{background:var(--panel);border:1px solid var(--line);borde
         <button data-cam="window">From window</button>
         <button data-cam="top">Top</button>
         <span class="seg" role="group" aria-label="Light"><button data-mood="day">Day</button><button data-mood="evening">Evening</button><button data-mood="night">Night</button><button data-mood="main" title="Ceiling light on, for cleaning">Main light</button></span>
+        <button id="focusBtn" aria-pressed="false" title="Show only the 3D view (Esc to go back)">Expand</button>
       </div>
     </div>
     <div id="view3d"></div>
@@ -460,7 +465,46 @@ const GEMINI_VARIANTS = Object.fromEntries([
     RUG2(200, 480, 300, 170),
   ]],
 ].map(([name, pal, list]) => [name, styled(pal, name, list)]));
-const PRESETS = { ...BASE, ...ZONED, ...GEMINI_VARIANTS };
+// ---- mixed: the desk moves to the window, the bed tries different spots (always along a wall, never in front of the door) ----
+const T_DESK_WIN = () => [P('desk_trestle', 40, 465.5, 270), P('office', 115, 465, 90), P('rug', 90, 465, 0, { w: 180, d: 186 })]; // window on your left
+const NEAR_DOOR = Object.fromEntries([
+  ['N1 · Bed along the piano wall by the door, slat headboard', GEM.oak, [
+    P('bed', 49.5, 102, 180), P('nightstand', 123, 180, 0), TL(123, 176),
+    P('slats', 55, 207, 0, { w: 110, h: 200 }), TALL(135, 225, 40, 150),
+    P('dresser', 24, 260, 270), P('armchair', 37.5, 340, 270), P('coffee', 105, 340, 0, { name: 'Chess table', w: 55, d: 55, chess: true }),
+    ...T_DESK_WIN(),
+    ...WD(), P('shelf', 341, 178, 90, { w: 70 }), W130(), P('piano', 344, 416, 90), P('bench', 298, 416, 270), P('lamp', 340, 520),
+  ]],
+  ['N2 · Bed at the back behind the KALLAX, desk by the window', GEM.green, [
+    P('piano', 12, 89, 270), P('bench', 58, 89, 270), P('dresser', 24, 200, 270),
+    P('armchair', 37.5, 300, 270), P('coffee', 105, 300, 0, { name: 'Chess table', w: 55, d: 55, chess: true }), P('lamp', 20, 360),
+    ...T_DESK_WIN(),
+    ...WD(), P('shelf', 341, 178, 90, { w: 70 }), W130(),
+    P('kallax', 282.5, 367.5, 180), P('bed', 254, 499.5, 90), P('nightstand', 332, 430, 90), TL(336, 430), RUG2(254, 500, 220, 150),
+  ]],
+  ['N3 · Everything on the piano wall, desk by the window', GEM.scandi, [
+    P('piano', 12, 64, 270), P('bench', 58, 64, 270),
+    P('bed', 49.5, 232, 180), P('nightstand', 123, 310, 0), TL(123, 306),
+    P('slats', 50, 337, 0, { w: 100, h: 200 }), TALL(125, 360, 35, 130),
+    P('desk_trestle', 40, 469.5, 270), P('office', 115, 469, 90), P('rug', 90, 469, 0, { w: 180, d: 180 }),
+    P('shelf', 341, 70, 90), P('dresser', 332, 177, 90), W130(),
+    P('armchair', 318.5, 515, 90), P('coffee', 230, 505, 0, { name: 'Chess table', w: 55, d: 55, chess: true }), P('lamp', 340, 380), RUG2(250, 470, 200, 150),
+  ]],
+  ['N4 · Bed in the window corner, desk by the window on the wardrobe wall', PAL.terracotta, [
+    P('piano', 12, 89, 270), P('bench', 58, 89, 270), P('dresser', 24, 200, 270), P('coffee', 105, 275, 0, { name: 'Chess table', w: 55, d: 55, chess: true }),
+    P('kallax', 73.5, 326.5, 180), P('bed', 49.5, 448, 0), P('nightstand', 123, 370, 0), TL(123, 366), RUG2(100, 470, 200, 150),
+    ...WD(), P('shelf', 341, 178, 90, { w: 70 }), W130(),
+    P('desk_trestle', 316, 437.5, 90), P('office', 241, 437, 270), P('rug', 250, 440, 0, { w: 180, d: 180 }), P('lamp', 330, 540),
+  ]],
+  ['N5 · Bed along the wardrobe wall by the door', GEM.mid, [
+    P('bed', 306.5, 115, 180), P('nightstand', 233, 193, 0), TL(233, 189), W130(),
+    P('piano', 12, 89, 270), P('bench', 58, 89, 270), P('dresser', 24, 200, 270), P('tv', 3, 200, 270, { z: 115 }),
+    P('armchair', 37.5, 290, 270), P('coffee', 105, 290, 0, { name: 'Chess table', w: 55, d: 55, chess: true }), P('lamp', 20, 350),
+    ...T_DESK_WIN(),
+    P('desk_wood', 323.5, 420, 90), P('chair', 270, 420, 270), P('lamp', 340, 530), RUG2(200, 140, 150, 200),
+  ]],
+].map(([name, pal, list]) => [name, styled(pal, name, list)]));
+const PRESETS = { ...BASE, ...ZONED, ...GEMINI_VARIANTS, ...NEAR_DOOR };
 
 // atmosphere: warm LED strips where they make sense, plus a table lamp on the dresser
 const LED = (x, y, rot, name, w, z, aim) => P('led', x, y, rot, { name, w, z, aim });
@@ -621,9 +665,13 @@ function viewAngle(from, dir, to = DOOR_PT) { // degrees between looking directi
 // bed: from the pillow you should watch someone walk the last metre to the bed (through the gap in a divider, or from the door).
 // Walks back along the shortest route from the bed and returns how far it stays visible and where it disappears.
 function approach(items, b, pillow, g) {
-  let k = -1, best = Infinity; // where you get into bed: the reachable spot closest to the pillow
+  let k = -1, best = Infinity; // where you get into bed: the reachable spot beside the bed's long side closest to the pillow
+  const t = b.rot * Math.PI / 180;
   for (let n = 0; n < g.seen.length; n++) {
     if (!g.seen[n] || g.distTo(b, g.cx(n), g.cy(n)) > g.R + 20) continue;
+    const along = -(g.cx(n) - b.x) * Math.sin(t) + (g.cy(n) - b.y) * Math.cos(t);
+    if (Math.abs(along) > b.d / 2 - 10) continue; // beyond the head or the foot
+
     const d = Math.hypot(g.cx(n) - pillow.x, g.cy(n) - pillow.y);
     if (d < best) { best = d; k = n; }
   }
@@ -714,7 +762,7 @@ let items = withCurtains(cur.items), layoutKey = cur.key, style = cur.style || '
 // ---------- layout select / save / load ----------
 function fillSelect() {
   const s = $('#layoutSel'); s.innerHTML = '';
-  for (const [label, group] of [['Your plan and first ideas', BASE], ['Zoned + feng shui', ZONED], ['Gemini render, trestle desk', GEMINI_VARIANTS]]) {
+  for (const [label, group] of [['Your plan and first ideas', BASE], ['Zoned + feng shui', ZONED], ['Gemini render, trestle desk', GEMINI_VARIANTS], ['Mixed: desk by the window', NEAR_DOOR]]) {
     const g = document.createElement('optgroup'); g.label = label;
     for (const k of Object.keys(group)) g.append(new Option(k, 'p:' + k));
     s.append(g);
@@ -1349,5 +1397,8 @@ function renderAll(save = true) {
   three.sync(items, selId);
   if (save) persist();
 }
+const setFocus = (on) => { document.body.classList.toggle('focus3d', on); $('#focusBtn').textContent = on ? 'Exit full view' : 'Expand'; $('#focusBtn').setAttribute('aria-pressed', on); };
+$('#focusBtn').onclick = () => setFocus(!document.body.classList.contains('focus3d'));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.body.classList.contains('focus3d')) setFocus(false); });
 drawStatic(); fillSelect(); renderEditor(); renderAll();
 </script>
