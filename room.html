@@ -112,6 +112,7 @@ select,input,textarea{background:var(--panel);border:1px solid var(--line);borde
 .p-item{cursor:grab}
 .p-item.dragging{cursor:grabbing}
 .p-body{stroke:rgba(0,0,0,.45);stroke-width:.8}
+.p-item.sel .p-led{stroke-width:5}
 .p-item.sel .p-body{stroke:var(--accent);stroke-width:3}
 .p-item.bad .p-body{stroke:var(--err);stroke-width:2.2;stroke-dasharray:4 2}
 .p-label{font:600 8.5px var(--sans);pointer-events:none;text-anchor:middle;dominant-baseline:middle}
@@ -175,7 +176,7 @@ select,input,textarea{background:var(--panel);border:1px solid var(--line);borde
         <button data-cam="door">From door</button>
         <button data-cam="window">From window</button>
         <button data-cam="top">Top</button>
-        <span class="seg" role="group" aria-label="Light"><button data-mood="day">Day</button><button data-mood="evening">Evening</button><button data-mood="night">Night</button></span>
+        <span class="seg" role="group" aria-label="Light"><button data-mood="day">Day</button><button data-mood="evening">Evening</button><button data-mood="night">Night</button><button data-mood="main" title="Ceiling light on, for cleaning">Main light</button></span>
       </div>
     </div>
     <div id="view3d"></div>
@@ -245,6 +246,7 @@ const T = {
   bedbench:   { name: 'Bed bench',      w: 100, d: 35, h: 45,  color: '#C69763' },
   curtains:   { name: 'Curtains',       w: 257, d: 15, h: 250, color: '#FAF8F3', fixed: 1 },
   wallshelf:  { name: 'Wall shelf',     w: 60,  d: 20, h: 25,  z: 150, color: '#C69763', wall: 1 },
+  led:        { name: 'LED strip',      w: 100, d: 2,  h: 1,   z: 100, color: '#FFC58A', light: 1 },
   rug:        { name: 'Rug',         w: 180, d: 190, h: 1,   color: '#8E959A', rug: 1 },
 };
 
@@ -448,8 +450,39 @@ const GEMINI_VARIANTS = Object.fromEntries([
     P('dresser', 24, 370, 270), P('wallshelf', 10, 370, 270), P('armchair', 37.5, 470, 270), P('lamp', 20, 548), P('tv', 3, 470, 270),
     RUG2(200, 480, 300, 170),
   ]],
+  // G3 plus a chess table between the armchair and the foot of the bed: armchair on one side, bed edge on the other
+  ['G4 · Like G3, with a chess table', GEM.oak, [
+    P('piano', 12, 89, 270), P('bench', 58, 89, 270), P('wallshelf', 10, 89, 270),
+    P('desk_trestle', 40, 238.5, 270), P('office', 115, 238, 90), P('rug', 90, 238.5, 0, { w: 180, d: 186 }), P('wallshelf', 10, 238, 270, { w: 90 }),
+    ...WD(), P('wallshelf', 346, 70, 90), P('shelf', 341, 178, 90, { w: 70 }), W130(),
+    P('kallax5', 265, 367.5, 180), P('bed', 254, 499.5, 90), P('nightstand', 332, 430, 90), TL(336, 430),
+    P('dresser', 24, 370, 270), P('wallshelf', 10, 370, 270), P('armchair', 77, 498, 225), P('coffee', 27.5, 440, 0, { name: 'Chess table', w: 55, d: 55, chess: true }), P('lamp', 20, 548), P('tv', 3, 470, 270),
+    RUG2(200, 480, 300, 170),
+  ]],
 ].map(([name, pal, list]) => [name, styled(pal, name, list)]));
 const PRESETS = { ...BASE, ...ZONED, ...GEMINI_VARIANTS };
+
+// atmosphere: warm LED strips where they make sense, plus a table lamp on the dresser
+const LED = (x, y, rot, name, w, z, aim) => P('led', x, y, rot, { name, w, z, aim });
+function ambience(list) {
+  const add = [];
+  for (const it of list) {
+    const t = it.rot * Math.PI / 180, fx = -Math.sin(t), fy = Math.cos(t); // item's front in the plan
+    if (it.type === 'tv') add.push(LED(it.x, it.y, it.rot, 'LED behind the TV', it.w + 10, (it.z || 0) + it.h / 2, 'back'));
+    if (it.type === 'wallshelf') add.push(LED(it.x, it.y, it.rot, 'LED under the shelf', it.w - 4, it.z - 1, 'down'));
+    if (it.type === 'kallax' || it.type === 'kallax5') add.push(LED(it.x, it.y, it.rot, 'LED on the KALLAX', it.w - 6, it.h + .5, 'up'));
+    if (it.type === 'bed') add.push(LED(it.x - fx * (it.d / 2 - 1), it.y - fy * (it.d / 2 - 1), it.rot, 'LED behind the bed', it.w, 62, 'up'));
+    if (it.type === 'piano') add.push(LED(it.x - fx * (it.d / 2 - 1), it.y - fy * (it.d / 2 - 1), it.rot, 'LED above the piano', it.w, 125, 'down'));
+    if (it.type === 'wardrobe') add.push(LED(it.x, it.y, it.rot, 'LED on top of the wardrobe', it.w - 6, it.h + .5, 'up'));
+    if (it.type === 'nightstand' && !list.some(l => l.type === 'lamp' && l.z > 0 && Math.hypot(l.x - it.x, l.y - it.y) < 30)) add.push(TL(it.x, it.y));
+    if (it.type === 'desk_black' || it.type === 'desk_trestle' || it.type === 'desk_wood') add.push(LED(it.x - fx * (it.d / 2 - 1), it.y - fy * (it.d / 2 - 1), it.rot, 'LED behind the desk', it.w - 10, 110, 'back'));
+    if (it.type === 'dresser') add.push(P('lamp', it.x + (it.w / 4) * Math.cos(t), it.y + (it.w / 4) * Math.sin(t), 0, { name: 'Table lamp', w: 22, d: 22, h: 42, z: it.h }));
+  }
+  add.push(LED(CURTAIN.x, ROOM.d - 12, 0, 'LED above the curtains', 250, 262, 'up'));
+  add.push(LED((DOOR.x0 + DOOR.x1) / 2, 2, 0, 'LED above the door', DOOR.x1 - DOOR.x0, 228, 'front'));
+  list.push(...add);
+}
+for (const k in PRESETS) ambience(PRESETS[k]);
 
 // ---- geometry ----
 function corners(r) {
@@ -482,7 +515,7 @@ const DOOR_ZONE = { x: (DOOR.x0 + DOOR.x1) / 2, y: DOOR.swing / 2, w: DOOR.x1 - 
 function issues(all) {
   const out = [], add = (sev, msg, ...ids) => out.push({ sev, msg, ids });
   const cur = all.find(i => i.type === 'curtains'), drapes = !cur || DRAPES.includes(cur.style);
-  const items = all.filter(i => !T[i.type].fixed);
+  const items = all.filter(i => !T[i.type].fixed && !T[i.type].light); // LED strips are stuck onto things, they don't take space
   const solids = items.filter(i => !T[i.type].rug);
   for (const a of solids) {
     const b = aabb(a);
@@ -516,6 +549,7 @@ function issues(all) {
   const need = EDOOR.y1 - EDOOR.y0;
   if (cover < need - 0.5) add('warn', cover ? `The blocked door is only ${Math.round(cover)} of ${need} cm covered. A ${need} cm wide wardrobe would hide it fully.` : 'Nothing tall covers the blocked door', ...coverIds);
   bedRules(items, add);
+  lightCoverage(all, add);
   const grid = walkGrid(items);
   fengShui(items, add, grid);
   for (const a of unreachable(items, grid)) add('warn', `There is no 60 cm wide path from the door to the ${a.name.toLowerCase()}`, a.id);
@@ -536,6 +570,33 @@ function bedRules(items, add) {
     const along = -(vx * hx + vy * hy), side = Math.abs(vx * Math.cos(t) + vy * Math.sin(t));
     if (along > b.d / 2 && side < b.w / 2 + 30) add('warn', 'The foot of the bed points straight at the door', b.id);
   }
+}
+
+// everyday lighting without the ceiling light: each place you use needs a lamp or LED strip close by
+function lightCoverage(all, add) {
+  const src = [];
+  for (const o of all) {
+    if (o.type === 'lamp') src.push({ a: o, b: o, r: o.h >= 80 ? 170 : 120 });
+    if (o.type === 'led') {
+      const t = o.rot * Math.PI / 180, dx = Math.cos(t) * o.w / 2, dy = Math.sin(t) * o.w / 2;
+      src.push({ a: { x: o.x - dx, y: o.y - dy }, b: { x: o.x + dx, y: o.y + dy }, r: 130 });
+    }
+  }
+  const segDist = (p, a, b) => {
+    const vx = b.x - a.x, vy = b.y - a.y, L = vx * vx + vy * vy;
+    const k = L ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / L)) : 0;
+    return Math.hypot(p.x - a.x - k * vx, p.y - a.y - k * vy);
+  };
+  const lit = (p) => src.some(s => segDist(p, s.a, s.b) <= s.r);
+  const spot = (o, out) => { const t = o.rot * Math.PI / 180; return { x: o.x - Math.sin(t) * (o.d / 2 + out), y: o.y + Math.cos(t) * (o.d / 2 + out) }; };
+  const places = [['the way in', null, { x: DOOR_PT.x, y: 70 }]];
+  for (const o of all) {
+    const t = o.rot * Math.PI / 180;
+    if (o.type === 'bed') places.push(['the bed', o, { x: o.x + Math.sin(t) * (o.d / 2 - 30), y: o.y - Math.cos(t) * (o.d / 2 - 30) }]);
+    if (['desk_black', 'desk_trestle', 'desk_wood', 'piano', 'wardrobe'].includes(o.type)) places.push([`the ${o.name.toLowerCase()}`, o, spot(o, 30)]);
+    if (o.type === 'armchair') places.push(['the armchair', o, o]);
+  }
+  for (const [name, o, p] of places) if (!lit(p)) add('warn', `Lighting: without the ceiling light nothing lights ${name}`, ...(o ? [o.id] : []));
 }
 
 // commanding position: from the pillow and the desk chair you should see the entrance, diagonally, not straight on
@@ -634,6 +695,7 @@ function unreachable(items, g) {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/lights/RectAreaLightUniformsLib.js"></script>
 
 <script>
 const $ = (s) => document.querySelector(s);
@@ -781,13 +843,19 @@ function renderPlan() {
   const gi = $('#items'), gc = $('#clears');
   gi.innerHTML = ''; gc.innerHTML = '';
   const bad = new Set(curIssues.filter(i => i.sev === 'err').flatMap(i => i.ids));
-  const order = (i) => T[i.type].rug ? 0 : T[i.type].wall ? 3 : T[i.type].chair ? 2 : 1;
+  const order = (i) => T[i.type].rug ? 0 : T[i.type].light ? 4 : T[i.type].wall ? 3 : T[i.type].chair ? 2 : 1;
   if ($('#showClear').checked) for (const it of items) {
     const z = clearZone(it); if (!z) continue;
     el('rect', { x: -z.w / 2, y: -z.d / 2, width: z.w, height: z.d, class: 'p-clear', transform: `translate(${z.x} ${z.y}) rotate(${z.rot})` }, gc);
   }
   for (const it of [...items].sort((a, b) => order(a) - order(b))) {
     const t = T[it.type], color = it.color || t.color;
+    if (t.light) {
+      const g = el('g', { class: 'p-item' + (it.id === selId ? ' sel' : ''), 'data-id': it.id, transform: `translate(${it.x} ${it.y}) rotate(${it.rot})` }, gi);
+      el('rect', { x: -it.w / 2, y: -3, width: it.w, height: 6, fill: 'transparent' }, g); // easier to grab
+      el('line', { x1: -it.w / 2, y1: 0, x2: it.w / 2, y2: 0, stroke: color, 'stroke-width': 2.5, 'stroke-linecap': 'round', 'stroke-dasharray': '6 3', class: 'p-led' }, g);
+      continue;
+    }
     if (it.type === 'curtains') {
       const drape = DRAPES.includes(it.style), z = drape ? CURTAIN : { x: CURTAIN.x, y: ROOM.d - 4, w: 217, d: 8 };
       const g = el('g', { class: 'p-item' + (it.id === selId ? ' sel' : ''), 'data-id': it.id }, gi);
@@ -811,7 +879,7 @@ function renderPlan() {
   }
   // labels on top, unrotated
   for (const it of items) {
-    const t = T[it.type]; if (t.rug || t.fixed || it.type === 'wallshelf') continue;
+    const t = T[it.type]; if (t.rug || t.fixed || t.light || it.type === 'wallshelf') continue;
     if (Math.min(it.w, it.d) < 30 && it.type !== 'piano' && !t.wall && !t.lab) continue;
     const tx = el('text', { x: it.x, y: it.y, class: 'p-label', fill: t.rug ? 'var(--ink)' : (lum(it.color || t.color) < 110 ? '#fff' : '#1E2522') }, gi);
     tx.textContent = it.name;
@@ -882,6 +950,13 @@ function renderEditor() {
     f.append(l);
     l.querySelector('input').addEventListener('input', (e) => setField(k, e.target.value));
   }
+  if (T[it.type].light) {
+    const l = document.createElement('label'); l.className = 'wide';
+    l.innerHTML = `Shines<select id="f-aim">${Object.entries(AIMS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>`;
+    box.querySelector('.fields').append(l);
+    $('#f-aim').value = it.aim || 'back';
+    $('#f-aim').onchange = (e) => { it.aim = e.target.value; edited(); renderAll(); };
+  }
   addSwatches(box, it);
   box.querySelectorAll('[data-r]').forEach(b => b.onclick = () => rotate(+b.dataset.r));
   $('#rmBtn').onclick = removeSel;
@@ -932,6 +1007,8 @@ function setField(k, val) {
 }
 const WOODS = [['Honey oak', '#C99D66'], ['Stained pine', '#6B4428'], ['Birch', '#E3C99B'], ['Light oak', '#D8B887'], ['Oak', '#C69763'], ['Teak', '#A8703F'], ['Walnut', '#6E4A30'], ['Dark brown', '#3F2B20'], ['White-stained oak', '#E9E0CE'], ['White', '#F2F1EC'], ['Black', '#26282B']];
 const FABRICS = [['Olive', '#76804F'], ['Sage', '#9AA68A'], ['Beige', '#CFC3AE'], ['Cream', '#E9E2D2'], ['Light grey', '#B9B7B0'], ['Grey', '#8E959A'], ['Charcoal', '#45494D'], ['Rust', '#A9573A'], ['Navy', '#34455E'], ['Dusty blue', '#98A7B6'], ['Mustard', '#C89B3C'], ['Forest', '#4F6B4A'], ['Clay', '#C98B6B'], ['Linen', '#D9CDB8'], ['Sand', '#E6DCC8']];
+const LED_COLOURS = [['Warm white 2700K', '#FFC58A'], ['Candle 2200K', '#FFB066'], ['Neutral white 4000K', '#FFE9D0'], ['Amber', '#FF9A3C'], ['Rose', '#FF8FA3'], ['Lavender', '#B79CFF'], ['Teal', '#6FE3D4'], ['Blue', '#6FA8FF']];
+const AIMS = { back: 'Onto the wall behind', up: 'Up', down: 'Down', front: 'Forward' };
 function finishes(it) {
   const k = it.type;
   if (k === 'bed') return [['color2', 'Bedding', FABRICS], ['color', 'Frame', WOODS]];
@@ -940,6 +1017,7 @@ function finishes(it) {
   if (k === 'rug' || k === 'office' || k === 'bench') return [['color', 'Colour', FABRICS]];
   if (k === 'lamp') return [['color', 'Shade', FABRICS]];
   if (k === 'curtain_div' || k === 'curtains') return [['color', 'Fabric', FABRICS]];
+  if (k === 'led') return [['color', 'Light colour', LED_COLOURS]];
   if (k === 'plant') return [];
   return [['color', 'Finish', WOODS]];
 }
@@ -972,6 +1050,7 @@ document.addEventListener('keydown', (e) => {
 const three = (() => {
   const host = $('#view3d');
   if (!window.THREE) { host.innerHTML = '<p id="no3d">The 3D view could not load (no connection to the 3D library). The plan and checks still work.</p>'; return { sync() {} }; }
+  if (THREE.RectAreaLightUniformsLib) THREE.RectAreaLightUniformsLib.init(); // LED strips are area lights
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -991,9 +1070,10 @@ const three = (() => {
 
   // three light moods. lamp = floor lamps, table = bedside lamps, pendant = ceiling light, tv = screen glow
   const MOODS = {
-    day:     { hemi: .75, sun: .55, sunColor: 0xfff4e0, sunPos: [90, 420, 900],   glass: [0x8fb4c8, .55], bg: null,      lamp: 0,   table: 0,  pendant: 0,   tv: 0,   shade: .25, screen: .03 },
-    evening: { hemi: .16, sun: .5,  sunColor: 0xff9448, sunPos: [-60, 110, 1150], glass: [0xff9a55, .6],  bg: '#1D1614', lamp: 1.1, table: .8, pendant: 1.1, tv: .3,  shade: 1.1, screen: .9 },
-    night:   { hemi: .08, sun: .22, sunColor: 0x7d95c9, sunPos: [260, 520, 950],  glass: [0x22345A, .45], bg: '#07090D', lamp: 1.3, table: 1.2, pendant: 0,   tv: .7,  shade: 1.1, screen: 1.1 },
+    day:     { hemi: .75, sun: .55, sunColor: 0xfff4e0, sunPos: [90, 420, 900],   glass: [0x8fb4c8, .55], bg: null,      lamp: 0,   table: 0,  pendant: 0,   tv: 0,   shade: .25, screen: .03, led: 0 },
+    evening: { hemi: .16, sun: .5,  sunColor: 0xff9448, sunPos: [-60, 110, 1150], glass: [0xff9a55, .6],  bg: '#1D1614', lamp: 1.1, table: .9, pendant: 0,   tv: .3,  shade: 1.1, screen: .9, led: 1 },
+    night:   { hemi: .08, sun: .22, sunColor: 0x7d95c9, sunPos: [260, 520, 950],  glass: [0x22345A, .45], bg: '#07090D', lamp: 1.3, table: 1.2, pendant: 0,   tv: .7,  shade: 1.1, screen: 1.1, led: .9 },
+    main:    { hemi: .3,  sun: .1,  sunColor: 0x7d95c9, sunPos: [260, 520, 950],  glass: [0x22345A, .4],  bg: '#07090D', lamp: 0,   table: 0,  pendant: 1.9, tv: 0,   shade: .25, screen: .03, led: 0 },
   };
   const mats = {}, lights = new Set(), shades = new Set(), screens = new Set();
   let mood = store.get('room.mood', 'day'); if (!MOODS[mood]) mood = 'day';
@@ -1006,8 +1086,8 @@ const three = (() => {
     const m = MOODS[mood];
     hemi.intensity = m.hemi; sun.intensity = m.sun; sun.color.setHex(m.sunColor); sun.position.set(...m.sunPos);
     if (typeof glass !== 'undefined') { glass.emissive.setHex(m.glass[0]); glass.emissiveIntensity = m.glass[1]; }
-    for (const L of lights) L.intensity = L.parent ? m[L.userData.kind] : 0;
-    for (const s of shades) s.emissiveIntensity = s.userData.kind === 'pendant' && !m.pendant ? 0 : m.shade;
+    for (const L of lights) L.intensity = L.parent ? m[L.userData.kind] * (L.userData.gain || 1) : 0;
+    for (const s of shades) s.emissiveIntensity = s.userData.kind === 'led' ? m.led * .7 : s.userData.kind === 'pendant' ? (m.pendant ? 1.2 : 0) : m.shade;
     for (const s of screens) s.emissiveIntensity = m.screen;
     bg();
   }
@@ -1107,7 +1187,18 @@ const three = (() => {
       const b = box(g, w - 14, h - 30, 9, 0, 30, -d / 2 + 8, c); b.rotation.x = -.18;
       for (const sx of [-1, 1]) { box(g, 5, 3, d - 8, sx * (w / 2 - 4), 55, 0, c2); box(g, 3, 30, 3, sx * (w / 2 - 4), 25, d / 2 - 8, c2); }
     },
-    coffee(g, w, d, h, c) { const top = cyl(g, w / 2, w / 2, 3, 0, h - 3, 0, c, 40); top.scale.z = d / w; for (let k = 0; k < 3; k++) { const a = k * 2.094; cyl(g, 1.8, 1.8, h - 3, Math.cos(a) * w * .3, 0, Math.sin(a) * d * .3, c, 8); } box(g, 30, .6, 30, 0, h, 0, '#EDEAE3'); },
+    coffee(g, w, d, h, c, c2, it) {
+      const top = cyl(g, w / 2, w / 2, 3, 0, h - 3, 0, c, 40); top.scale.z = d / w;
+      for (let k = 0; k < 3; k++) { const a = k * 2.094; cyl(g, 1.8, 1.8, h - 3, Math.cos(a) * w * .3, 0, Math.sin(a) * d * .3, c, 8); }
+      if (!it.chess) { box(g, 30, .6, 30, 0, h, 0, '#EDEAE3'); return; }
+      const S = Math.min(34, w * .62), q = S / 8;
+      box(g, S + 2, 1.2, S + 2, 0, h, 0, '#5B3B2C');
+      for (let r = 0; r < 8; r++) for (let f = 0; f < 8; f++) box(g, q, .3, q, -S / 2 + q * (f + .5), h + 1.2, -S / 2 + q * (r + .5), (r + f) % 2 ? '#6E4A30' : '#EFE3C8');
+      for (const [row, col] of [[0, '#F4EEE2'], [1, '#F4EEE2'], [6, '#2A2522'], [7, '#2A2522']]) for (let f = 0; f < 8; f++) {
+        const back = row === 0 || row === 7, ph = back ? (f === 3 || f === 4 ? 4.2 : 3) : 2.2;
+        cyl(g, q * .22, q * .32, ph, -S / 2 + q * (f + .5), h + 1.5, -S / 2 + q * (row + .5), col, 10);
+      }
+    },
     office(g, w, d, h, c) {
       for (let k = 0; k < 5; k++) { const s = box(g, w / 2, 3, 4, 0, 2, 0, DARK); s.geometry.translate(w / 4, 0, 0); s.rotation.y = k * 1.2566; }
       cyl(g, 2.5, 2.5, 38, 0, 4, 0, STEEL, 10); box(g, 50, 8, 48, 0, 42, 2, sh(c, .06));
@@ -1130,6 +1221,18 @@ const three = (() => {
       addLight(g, 'tv', 0x9fb8ff, 260, 0, h / 2, d / 2 + 20);
     },
     rug(g, w, d, h, c) { box(g, w, 1, d, 0, 0, 0, c); },
+    // LED strip: a glowing line plus an area light facing where it shines
+    led(g, w, d, h, c, c2, it) {
+      const glow = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0, roughness: .5 }); glow.userData.kind = 'led'; shades.add(glow);
+      const dir = { back: [0, 0, -1], up: [0, 1, 0], down: [0, -1, 0], front: [0, 0, 1] }[it.aim || 'back'];
+      const strip = new THREE.Mesh(new THREE.PlaneGeometry(w, 1.5), glow); // one-sided: only seen from where it shines, like a hidden strip
+      strip.position.set(0, .6, 0); strip.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...dir)); g.add(strip);
+      if (!THREE.RectAreaLight) return;
+      const L = new THREE.RectAreaLight(c, 0, w, 5);
+      L.position.set(dir[0] * 2, .6 + dir[1] * 2, dir[2] * 2);
+      L.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), new THREE.Vector3(...dir));
+      L.userData.kind = 'led'; L.userData.gain = 6; g.add(L); lights.add(L); setMood();
+    },
     // polished top on two sawhorses: a beam front-to-back, splayed A-legs, a stretcher on each side
     desk_trestle(g, w, d, h, c, c2) {
       box(g, w, 3, d, 0, h - 3, 0, M(c, { roughness: .3 }));
@@ -1199,7 +1302,7 @@ const three = (() => {
     const seen = new Set();
     for (const it of list) {
       seen.add(it.id);
-      const key = [it.type, it.w, it.d, it.h, it.color, it.color2, it.style].join('|');
+      const key = [it.type, it.w, it.d, it.h, it.color, it.color2, it.style, it.aim].join('|');
       let g = groups.get(it.id);
       if (!g || g.userData.key !== key) {
         if (g) scene.remove(g);
