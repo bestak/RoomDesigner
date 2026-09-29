@@ -94,6 +94,19 @@ select,input,textarea{background:var(--panel);border:1px solid var(--line);borde
 .sw button{width:22px;height:22px;padding:0;border-radius:50%;border:1px solid rgba(0,0,0,.25)}
 .sw button.on{outline:2px solid var(--accent);outline-offset:2px}
 .sw input[type=color]{width:30px;height:24px;padding:1px;cursor:pointer}
+.prods{display:grid;gap:4px;max-height:340px;overflow:auto;padding:2px}
+.prods .sw-label{position:sticky;top:-2px;background:var(--panel);padding:2px 0}
+.prod{display:grid;grid-template-columns:44px 1fr;gap:8px;align-items:center;text-align:left;padding:4px 6px}
+.prod img,.prod .gen{width:44px;height:44px;object-fit:contain;background:#fff;border-radius:4px}
+.prod .gen{display:grid;place-items:center;font:10px var(--mono);color:#66706B;border:1px dashed #B9BDB8}
+.prod b{font-weight:500;font-size:12.5px;display:block;line-height:1.25}
+.prod.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.prod-note{font-size:12px;color:var(--muted)}
+.prod-note a{color:var(--accent)}
+#shop ul{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+#shop li{display:grid;grid-template-columns:1fr auto;gap:8px;font-size:12.5px;padding:3px 6px;border-radius:5px;cursor:pointer}
+#shop li:hover{background:var(--bg)}
+#shop .tot{display:flex;justify-content:space-between;font-weight:600;border-top:1px solid var(--line);padding-top:6px}
 .keys{font-size:12px;color:var(--muted);margin:0;padding-left:16px}
 .keys kbd{font:11px var(--mono);border:1px solid var(--line);border-radius:3px;padding:0 4px;color:var(--ink)}
 
@@ -193,6 +206,7 @@ body.focus3d .pane{height:auto}
       <ul id="issues"></ul>
     </div>
     <div class="card" id="editBox"></div>
+    <div class="card" id="shop"></div>
     <div class="card">
       <h2>Add furniture</h2>
       <div class="btnrow">
@@ -337,6 +351,7 @@ const WOODY = ['wallshelf', 'wardrobe', 'dresser', 'kallax', 'kallax5', 'coffee'
 function themed(pal, list) {
   let rugs = 0;
   for (const it of list) {
+    if (it.pick) continue; // a real product keeps its own colours
     if (WOODY.includes(it.type)) it.color = pal.wood;
     else if (it.type === 'armchair') { it.color = pal.fabric; it.color2 = pal.wood2 || pal.wood; }
     else if (it.type === 'rug') it.color = rugs++ ? pal.rug2 : pal.rug1;
@@ -556,6 +571,26 @@ function clearZone(it) {
 }
 const DOOR_ZONE = { x: (DOOR.x0 + DOOR.x1) / 2, y: DOOR.swing / 2, w: DOOR.x1 - DOOR.x0, d: DOOR.swing, rot: 0 };
 
+// ---- real products (products.js): which list a piece picks from, and swapping it for one (p = null goes back to generic) ----
+function catOf(it) {
+  if (it.type === 'lamp') return (it.base || it).h < 80 ? 'table_lamp' : 'lamp';
+  if (it.type === 'kallax5') return 'kallax';
+  if (it.type.startsWith('desk_')) return 'desk';
+  return it.type;
+}
+function applyProduct(it, p) {
+  if (!it.base) it.base = { name: it.name, w: it.w, d: it.d, h: it.h, color: it.color, color2: it.color2 };
+  let s = p ? { w: p.w ?? it.base.w, d: p.d ?? it.base.d, h: p.h ?? it.base.h } : it.base; // a size the shop doesn't list stays as it was
+  if (T[it.type].rug && (s.w > s.d) !== (it.w > it.d)) s = { ...s, w: s.d, d: s.w }; // rugs keep their orientation
+  if (!T[it.type].rug) { const t = it.rot * Math.PI / 180, k = (s.d - it.d) / 2; it.x -= Math.sin(t) * k; it.y += Math.cos(t) * k; } // keep the back edge where it was (usually a wall)
+  delete it.pick; delete it.look;
+  if (!p) { Object.assign(it, it.base); delete it.base; }
+  else Object.assign(it, { pick: p.id, name: p.name, w: s.w, d: s.d, h: s.h, color: p.color, color2: p.color2 ?? it.base.color2 }, p.look ? { look: p.look } : {});
+  const b = aabb(it); // a bigger model that would go through a wall moves back into the room
+  it.x += Math.max(0, -b.x0) - Math.max(0, b.x1 - ROOM.w); it.y += Math.max(0, -b.y0) - Math.max(0, b.y1 - ROOM.d);
+  return it;
+}
+
 function issues(all) {
   const out = [], add = (sev, msg, ...ids) => out.push({ sev, msg, ids });
   const cur = all.find(i => i.type === 'curtains'), drapes = !cur || DRAPES.includes(cur.style);
@@ -744,6 +779,7 @@ function unreachable(items, g) {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/lights/RectAreaLightUniformsLib.js"></script>
+<script src="products.js"></script>
 
 <script>
 const $ = (s) => document.querySelector(s);
@@ -841,7 +877,7 @@ function persist() { store.set('room.current', { key: layoutKey, items, style })
     else { // back to the layout's own colours, keeping any furniture you moved
       const src = layoutKey.startsWith('p:') ? withCurtains(clone(PRESETS[layoutKey.slice(2)] || [])) : [];
       const own = new Map(src.map(i => [i.id, i]));
-      for (const it of items) { const o = own.get(it.id) || { type: it.type }; for (const k of ['color', 'color2', 'style']) if (o[k] !== undefined || k !== 'style') { if (o[k] === undefined) delete it[k]; else it[k] = o[k]; } }
+      for (const it of items) { if (it.pick) continue; const o = own.get(it.id) || { type: it.type }; for (const k of ['color', 'color2', 'style']) if (o[k] !== undefined || k !== 'style') { if (o[k] === undefined) delete it[k]; else it[k] = o[k]; } }
     }
     renderEditor(); renderAll();
   };
@@ -912,7 +948,7 @@ function renderPlan() {
     }
     const g = el('g', { class: 'p-item' + (it.id === selId ? ' sel' : '') + (bad.has(it.id) ? ' bad' : ''), 'data-id': it.id, transform: `translate(${it.x} ${it.y}) rotate(${it.rot})` }, gi);
     if (it.type === 'wallshelf') { el('rect', { x: -it.w / 2, y: -it.d / 2, width: it.w, height: it.d, fill: color, 'fill-opacity': .45, class: 'p-body', 'stroke-dasharray': '2 2' }, g); continue; }
-    if (t.round) el('ellipse', { rx: it.w / 2, ry: it.d / 2, fill: color, class: 'p-body' }, g);
+    if (t.round && it.look?.shape !== 'rect') el('ellipse', { rx: it.w / 2, ry: it.d / 2, fill: color, class: 'p-body' }, g);
     else el('rect', { x: -it.w / 2, y: -it.d / 2, width: it.w, height: it.d, rx: t.rug ? 2 : 1, fill: color, class: 'p-body', 'fill-opacity': t.rug ? .75 : 1 }, g);
     if (it.type === 'bed') {
       el('rect', { x: -it.w / 2 + 5, y: -it.d / 2 + 5, width: it.w - 10, height: it.d - 10, fill: it.color2 || t.c2, 'pointer-events': 'none' }, g);
@@ -1006,6 +1042,7 @@ function renderEditor() {
     $('#f-aim').onchange = (e) => { it.aim = e.target.value; edited(); renderAll(); };
   }
   addSwatches(box, it);
+  addProducts(box, it);
   box.querySelectorAll('[data-r]').forEach(b => b.onclick = () => rotate(+b.dataset.r));
   $('#rmBtn').onclick = removeSel;
   $('#dupBtn').onclick = () => { const c = { ...clone(it), id: it.type + '-' + Date.now(), x: it.x + 20, y: it.y + 20 }; items.push(c); selId = c.id; edited(); renderEditor(); renderAll(); };
@@ -1073,6 +1110,54 @@ function setColor(k, hex) {
   const it = items.find(i => i.id === selId); if (!it) return;
   it[k] = hex; edited(); renderAll();
 }
+// ---------- real products (products.js): each piece is either its generic form or one of these ----------
+const CATALOG = window.PRODUCTS || {};
+const BY_ID = new Map(Object.values(CATALOG).flat().map(p => [p.id, p]));
+const KC = (n) => n == null ? 'price?' : n.toLocaleString('cs-CZ') + ' Kč';
+const dims = (o) => `${o.w}×${o.d}×${o.h}`;
+function pick(it, p) { applyProduct(it, p); edited(); renderEditor(); renderAll(); }
+function addProducts(box, it) {
+  const list = CATALOG[catOf(it)]; if (!list?.length) return;
+  const wrap = document.createElement('div'); wrap.className = 'prods';
+  wrap.innerHTML = `<span class="sw-label">Model · generic or ${list.length} real ones</span>`;
+  for (const p of [null, ...list]) {
+    const b = document.createElement('button'); b.className = 'prod' + ((p?.id) === it.pick ? ' on' : '');
+    b.innerHTML = (p ? '<img alt="" loading="lazy" referrerpolicy="no-referrer">' : '<span class="gen">generic</span>') + '<span><b></b><span class="ro"></span></span>';
+    b.querySelector('b').textContent = p ? p.name : 'Generic ' + T[it.type].name.toLowerCase();
+    b.querySelector('.ro').textContent = p ? `${p.shop} · ${KC(p.price)} · ${dims({ ...(it.base || it), ...p })}` : `placeholder · ${dims(it.base || it)}`;
+    if (p) b.querySelector('img').src = p.img;
+    b.onclick = () => pick(it, p);
+    wrap.append(b);
+  }
+  const p = BY_ID.get(it.pick), n = document.createElement('p'); n.className = 'prod-note';
+  if (it.pick && !p) n.textContent = 'This model is no longer in products.js.';
+  else if (p) {
+    n.textContent = [p.note, p.shop === 'Bazoš' ? 'Second-hand listing, it may already be sold.' : '', `Price checked ${p.checked}.`].filter(Boolean).join(' ') + ' ';
+    const a = document.createElement('a'); a.href = p.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = `Open on ${p.shop} ↗`; n.append(a);
+  }
+  box.querySelector('.card-head').after(wrap, ...(it.pick ? [n] : []));
+  const on = wrap.querySelector('.on'); if (on) wrap.scrollTop = on.offsetTop - wrap.offsetTop - 60; // keep the chosen model in view
+}
+function renderShop() {
+  const box = $('#shop'), picked = items.filter(i => BY_ID.has(i.pick));
+  const generic = items.filter(i => !i.pick && CATALOG[catOf(i)]?.length).length;
+  box.innerHTML = `<div class="card-head"><h2>Shopping list</h2><span class="ro">${generic} still generic</span></div>`;
+  if (!picked.length) { box.insertAdjacentHTML('beforeend', '<p class="empty">Select a piece and pick a real model. Its price shows up here.</p>'); return; }
+  const ul = document.createElement('ul'); let total = 0, unknown = 0;
+  const uses = {}; for (const it of picked) uses[it.pick] = (uses[it.pick] || 0) + 1;
+  for (const it of picked) {
+    const p = BY_ID.get(it.pick); if (p.price == null) unknown++; else total += p.price;
+    const li = document.createElement('li'); li.innerHTML = '<span></span><span class="mono"></span>';
+    li.firstChild.textContent = `${p.shop} · ${p.name}` + (p.shop === 'Bazoš' && uses[p.id] > 1 ? ` (one listing, used ${uses[p.id]}×)` : '');
+    li.lastChild.textContent = KC(p.price);
+    li.onclick = () => { selId = it.id; renderEditor(); renderAll(false); };
+    ul.append(li);
+  }
+  const tot = document.createElement('div'); tot.className = 'tot';
+  tot.innerHTML = `<span>Total</span><span class="mono">${KC(total)}${unknown ? ` + ${unknown} without a price` : ''}</span>`;
+  box.append(ul, tot);
+}
+
 function rotate(deg) { const it = items.find(i => i.id === selId); if (!it) return; it.rot = (((it.rot + deg) % 360) + 360) % 360; edited(); renderAll(); }
 function removeSel() { items = items.filter(i => i.id !== selId); selId = null; edited(); renderEditor(); renderAll(); }
 
@@ -1209,7 +1294,20 @@ const three = (() => {
     m.castShadow = m.receiveShadow = true; g.add(m); return m;
   }
   const B = {
-    bed(g, w, d, h, c, c2) { box(g, w, h - 12, d, 0, 0, 0, c); box(g, w - 6, 13, d - 6, 0, h - 14, 0, '#E3E7EA'); box(g, w - 28, 9, 36, 0, h - 1, -d / 2 + 26, '#F4F5F6'); box(g, w - 2, 3, d * .55, 0, h - 1, d / 2 - d * .275 - 3, c2); },
+    // look: top = mattress top, legs = open frame on legs, head/foot = board heights from the floor, soft = upholstered
+    bed(g, w, d, h, c, c2, it) {
+      const L = it.look;
+      if (!L) { box(g, w, h - 12, d, 0, 0, 0, c); box(g, w - 6, 13, d - 6, 0, h - 14, 0, '#E3E7EA'); box(g, w - 28, 9, 36, 0, h - 1, -d / 2 + 26, '#F4F5F6'); box(g, w - 2, 3, d * .55, 0, h - 1, d / 2 - d * .275 - 3, c2); return; }
+      const top = L.top, rail = top - 15, t = L.thin ? 2.5 : 5;
+      if (L.legs) { box(g, w, L.thin ? 4 : 12, d, 0, rail - (L.thin ? 4 : 12), 0, c); for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(g, t, rail, t, sx * (w / 2 - t / 2), 0, sz * (d / 2 - t / 2), L.legc || c); }
+      else box(g, w, rail, d, 0, 0, 0, c);
+      if (L.drawers) for (let k = 0; k < L.drawers; k++) box(g, 1.2, rail - 8, d / 2 - 12, w / 2 + .6, 4, (k - .5) * d / 2, sh(c, .04));
+      box(g, w - 8, 15, d - 12, 0, rail, 2, '#E3E7EA');
+      box(g, w - 28, 9, 36, 0, top, -d / 2 + 30, '#F4F5F6');
+      box(g, w - 6, 3, d * .5, 0, top, d / 2 - d * .25 - 6, c2);
+      if (L.head) box(g, w, L.head, L.soft ? 8 : 4, 0, 0, -d / 2 + (L.soft ? 4 : 2), c);
+      if (L.foot > rail) box(g, w, L.foot, 4, 0, 0, d / 2 - 2, c);
+    },
     desk_black(g, w, d, h, c) { box(g, w, 3, d, 0, h - 3, 0, c); for (const sx of [-1, 1]) for (const sz of [-1, 1]) cyl(g, 2.2, 2.2, h - 3, sx * (w / 2 - 12), 0, sz * (d / 2 - 12), STEEL, 10); },
     desk_wood(g, w, d, h, c) { box(g, w, 4, d, 0, h - 4, 0, c); for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(g, 5, h - 4, 5, sx * (w / 2 - 5), 0, sz * (d / 2 - 5), c); },
     piano(g, w, d, h, c) {
@@ -1219,9 +1317,35 @@ const three = (() => {
       const r = box(g, w * .45, 24, 1.5, 0, h, -d / 2 + 6, c); r.rotation.x = -.2;
     },
     bench(g, w, d, h, c) { box(g, w, 5, d, 0, h - 5, 0, c); for (const sx of [-1, 1]) { box(g, 3, h - 5, 3, sx * (w / 2 - 8), 0, 0, DARK); box(g, 3, 3, d + 10, sx * (w / 2 - 8), 0, 0, DARK); } },
-    nightstand(g, w, d, h, c) { box(g, w, h, d, 0, 0, 0, c); for (let k = 0; k < 2; k++) box(g, w - 4, h / 2 - 4, 1, 0, 2 + k * h / 2, d / 2 + .5, sh(c, .04)); },
-    dresser(g, w, d, h, c) { box(g, w, h, d, 0, 0, 0, c); const n = Math.max(2, Math.round(h / 25)), rh = (h - 6) / n; for (let k = 0; k < n; k++) box(g, w - 4, rh - 2, 1.2, 0, 4 + k * rh, d / 2 + .6, sh(c, .03)); },
-    wardrobe(g, w, d, h, c) { box(g, w, h, d, 0, 0, 0, c); for (const sx of [-1, 1]) { box(g, w / 2 - 2, h - 6, 1.2, sx * w / 4, 3, d / 2 + .6, sh(c, .03)); box(g, 1.6, 22, 2.5, sx * 4, h / 2 - 5, d / 2 + 1.5, sh(c, -.3)); } },
+    nightstand(g, w, d, h, c, c2, it) { B.cabinet(g, w, d, h, c, { drawers: 2, ...it.look }); },
+    dresser(g, w, d, h, c, c2, it) { B.cabinet(g, w, d, h, c, { drawers: Math.max(2, Math.round(h / 25)), ...it.look }); },
+    // drawers from the top down, an open shelf of height `open` below them, optional legs and a contrasting top
+    cabinet(g, w, d, h, c, L) {
+      const legs = L.legs || 0, bh = h - legs, open = L.open || 0, lc = L.legc || sh(c, -.12);
+      if (legs) for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(g, 3, legs, 3, sx * (w / 2 - 3), 0, sz * (d / 2 - 3), lc);
+      box(g, w, bh, d, 0, legs, 0, c);
+      if (L.top) box(g, w + 1, 2.5, d + 1, 0, h - 2.5, 0, L.top);
+      if (open) box(g, w - 4, open - 3, d - 3, 0, legs + 2, 1.6, sh(c, -.22)); // dark recess reads as an open shelf
+      const n = L.drawers, rh = (bh - open - 4) / n;
+      for (let k = 0; k < n; k++) {
+        const y = legs + open + 2 + k * rh;
+        box(g, w - 4, rh - 2, 1.2, 0, y, d / 2 + .6, sh(c, .03));
+        box(g, Math.min(12, w / 5), 1.2, 1.4, 0, y + rh - 7, d / 2 + 1.6, sh(c, -.3));
+      }
+    },
+    // look: doors, drawers (a row at the bottom, or with stack a column under the last door), mirror = index of a mirrored door, legs
+    wardrobe(g, w, d, h, c, c2, it) {
+      const L = it.look || {}, n = L.doors || 2, legs = L.legs || 0, dr = L.drawers || 0, band = dr && !L.stack ? 22 : 0, dw = (w - 4) / n;
+      if (legs) for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(g, 4, legs, 4, sx * (w / 2 - 5), 0, sz * (d / 2 - 5), sh(c, -.15));
+      box(g, w, h - legs, d, 0, legs, 0, c);
+      if (L.stack) for (let k = 0; k < dr; k++) { box(g, dw - 1.5, 14, 1.2, w / 2 - 2 - dw / 2, legs + 3 + k * 16, d / 2 + .6, sh(c, .03)); box(g, 12, 1.2, 1.4, w / 2 - 2 - dw / 2, legs + 12 + k * 16, d / 2 + 1.6, sh(c, -.3)); }
+      else for (let k = 0; k < dr; k++) box(g, (w - 4) / dr - 2, band - 3, 1.2, -w / 2 + 2 + (k + .5) * (w - 4) / dr, legs + 2, d / 2 + .6, sh(c, .03));
+      for (let k = 0; k < n; k++) {
+        const x = -w / 2 + 2 + dw * (k + .5), mirror = k === L.mirror, low = L.stack && k === n - 1 ? dr * 16 : band;
+        box(g, dw - 1.5, h - legs - low - 5, 1.2, x, legs + low + 3, d / 2 + .6, mirror ? M('#DCE4E8', { roughness: .2, metalness: .05 }) : sh(c, .03));
+        box(g, 1.6, 22, 2.5, x + (k < n / 2 ? dw / 2 - 5 : -dw / 2 + 5), legs + (h - legs) / 2 - 5, d / 2 + 1.5, sh(c, -.3));
+      }
+    },
     kallax(g, w, d, h, c) {
       const n = Math.max(1, Math.round(w / 37)), m = Math.max(1, Math.round(h / 37)), t = 2.5;
       for (let i = 0; i <= n; i++) box(g, t, h, d, -w / 2 + t / 2 + i * (w - t) / n, 0, 0, c);
@@ -1229,15 +1353,56 @@ const three = (() => {
       const cw = (w - t) / n, ch = (h - t) / m, books = ['#6F7C8A', '#A55C45', '#E9E2D2', '#56694F'];
       for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) if ((i * 3 + j * 2) % 4 === 0) box(g, cw * .6, ch * .72, d * .6, -w / 2 + t + cw * (i + .5) - t / 2, j * ch + t, 0, books[(i + j) % 4]);
     },
-    armchair(g, w, d, h, c, c2) {
+    // look.kind: wood (open wooden frame, the default) | poang (bent cantilever frame) | wing (upholstered wingback) | shell (tub seat on thin legs)
+    armchair(g, w, d, h, c, c2, it) {
+      const kind = it.look?.kind;
+      if (kind === 'poang') {
+        for (const sx of [-1, 1]) {
+          const x = sx * (w / 2 - 3);
+          strut(g, [x, 1.5, d / 2 - 8], [x, 1.5, -d / 2 + 10], 3, c2);               // floor runner
+          strut(g, [x, 1.5, d / 2 - 8], [x, 30, d / 2 - 4], 3, c2);                 // front curve up
+          strut(g, [x, 30, d / 2 - 4], [x, 52, -d / 2 + 18], 3, c2);                // armrest, sloping back
+          strut(g, [x, 30, d / 2 - 4], [x, 38, -d / 2 + 14], 3, c2);                // under the seat
+        }
+        const s = box(g, w - 10, 9, d * .5, 0, 36, 4, c); s.rotation.x = -.2;
+        const b = box(g, w - 10, h - 44, 9, 0, 42, -d / 2 + 18, c); b.rotation.x = -.45;
+        return;
+      }
+      if (kind === 'wing' || kind === 'shell') {
+        const legH = kind === 'wing' ? 12 : 22, seat = 44, lc = c2 || DARK;
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+          const x = sx * (w / 2 - 7), z = sz * (d / 2 - 7);
+          if (kind === 'wing') box(g, 4, legH, 4, x, 0, z, lc); else strut(g, [x * .85, legH, z * .85], [x, 0, z], 2.5, lc); // splayed legs
+        }
+        box(g, w - 4, seat - legH - 2, d - 10, 0, legH, 4, c);                              // seat block
+        box(g, w - 8, 8, d - 22, 0, seat - 4, 8, sh(c, .04));                               // cushion
+        const back = box(g, w - 4, h - legH, 12, 0, legH, -d / 2 + 8, c); back.rotation.x = -.08;
+        const armH = kind === 'wing' ? 62 : 58;
+        for (const sx of [-1, 1]) {
+          box(g, kind === 'wing' ? 11 : 8, armH - legH, d - 16, sx * (w / 2 - (kind === 'wing' ? 6 : 4)), legH, 2, c);
+          if (kind === 'wing') box(g, 8, h - armH - 8, 22, sx * (w / 2 - 5), armH, -d / 2 + 18, c); // the wings
+        }
+        return;
+      }
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(g, 3, 25, 3, sx * (w / 2 - 6), 0, sz * (d / 2 - 6), c2);
       box(g, w - 14, 12, d - 12, 0, 25, 4, c);
       const b = box(g, w - 14, h - 30, 9, 0, 30, -d / 2 + 8, c); b.rotation.x = -.18;
       for (const sx of [-1, 1]) { box(g, 5, 3, d - 8, sx * (w / 2 - 4), 55, 0, c2); box(g, 3, 30, 3, sx * (w / 2 - 4), 25, d / 2 - 8, c2); }
     },
+    // look: shape rect | round; legs tripod (default) | four | thick | thin | solid | pedestal | splay; shelf = lower shelf
     coffee(g, w, d, h, c, c2, it) {
-      const top = cyl(g, w / 2, w / 2, 3, 0, h - 3, 0, c, 40); top.scale.z = d / w;
-      for (let k = 0; k < 3; k++) { const a = k * 2.094; cyl(g, 1.8, 1.8, h - 3, Math.cos(a) * w * .3, 0, Math.sin(a) * d * .3, c, 8); }
+      const L = it.look || {}, lc = c2 || c, lh = h - 3;
+      if (L.shape === 'rect') box(g, w, 3, d, 0, lh, 0, c); else { const top = cyl(g, w / 2, w / 2, 3, 0, lh, 0, c, 40); top.scale.z = d / w; }
+      const corners = (k) => [-1, 1].flatMap(sx => [-1, 1].map(sz => [sx * (w / 2 - k), sz * (d / 2 - k)]));
+      const legs = L.legs || 'tripod';
+      if (legs === 'tripod') for (let k = 0; k < 3; k++) { const a = k * 2.094; cyl(g, 1.8, 1.8, lh, Math.cos(a) * w * .3, 0, Math.sin(a) * d * .3, lc, 8); }
+      if (legs === 'four') for (const [x, z] of corners(w * .18)) cyl(g, 2, 2, lh, x, 0, z, lc, 8);
+      if (legs === 'thin') for (const [x, z] of corners(w * .16)) cyl(g, .6, .6, lh, x, 0, z, lc, 6);
+      if (legs === 'thick') for (const [x, z] of corners(2.5)) box(g, 5, lh, 5, x, 0, z, lc);
+      if (legs === 'solid') { box(g, w - 2, lh, d - 2, 0, 0, 0, lc); for (let k = -2; k <= 2; k++) box(g, w - 6, 1.2, .6, 0, lh * (k + 2.5) / 5, d / 2 - .6, sh(lc, -.15)); }
+      if (legs === 'pedestal') for (const r of [0, Math.PI / 2]) { const p = box(g, w * .62, lh, 3, 0, 0, 0, lc); p.rotation.y = r; }
+      if (legs === 'splay') for (const [x, z] of corners(w * .2)) strut(g, [x * .8, lh, z * .8], [x * 1.1, 0, z * 1.1], 2.5, lc);
+      if (L.shelf) { const s = cyl(g, w / 2 - 6, w / 2 - 6, 2, 0, 10, 0, c, 40); s.scale.z = d / w; }
       if (!it.chess) { box(g, 30, .6, 30, 0, h, 0, '#EDEAE3'); return; }
       const S = Math.min(34, w * .62), q = S / 8;
       box(g, S + 2, 1.2, S + 2, 0, h, 0, '#5B3B2C');
@@ -1250,18 +1415,34 @@ const three = (() => {
     office(g, w, d, h, c) {
       for (let k = 0; k < 5; k++) { const s = box(g, w / 2, 3, 4, 0, 2, 0, DARK); s.geometry.translate(w / 4, 0, 0); s.rotation.y = k * 1.2566; }
       cyl(g, 2.5, 2.5, 38, 0, 4, 0, STEEL, 10); box(g, 50, 8, 48, 0, 42, 2, sh(c, .06));
-      const b = box(g, 46, 62, 5, 0, 52, -d / 2 + 10, c); b.rotation.x = -.12;
+      const b = box(g, 46, Math.max(40, h - 55), 5, 0, 52, -d / 2 + 10, c); b.rotation.x = -.12; // taller chairs get a taller back
     },
-    chair(g, w, d, h, c) { box(g, w, 4, d, 0, 42, 0, c); for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(g, 3.5, 42, 3.5, sx * (w / 2 - 3), 0, sz * (d / 2 - 3), c); box(g, w, 30, 3, 0, 52, -d / 2 + 1.5, c); },
-    lamp(g, w, d, h, c) {
-      const sh = Math.min(26, h * .5);
-      cyl(g, w / 2 - 2, w / 2 - 2, 2, 0, 0, 0, '#3A3A3A'); cyl(g, 1, 1, h - sh + 1, 0, 2, 0, '#3A3A3A', 8);
-      const shade = new THREE.MeshStandardMaterial({ color: c, emissive: 0xffcf8a, emissiveIntensity: .25, roughness: .9 }); shades.add(shade);
-      const sm = cyl(g, w / 2 - 4, w / 2, sh, 0, h - sh, 0, shade, 24); sm.castShadow = false; // light sits inside the shade
-      const table = h < 80;
+    chair(g, w, d, h, c, c2) { box(g, w, 4, d, 0, 42, 0, c2 || c); for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(g, 3.5, 42, 3.5, sx * (w / 2 - 3), 0, sz * (d / 2 - 3), c); box(g, w, 30, 3, 0, 52, -d / 2 + 1.5, c); },
+    // c = shade, c2 = pole/base. look: shade drum | dome | cone (uplighter) | globe; base disc | tripod | vase; sw = shade width (default w)
+    lamp(g, w, d, h, c, c2, it) {
+      const L = it.look || {}, pole = c2 || '#3A3A3A', kind = L.shade || 'drum', sw = L.sw || w, table = h < 80;
+      const sh = kind === 'globe' ? Math.min(sw, h) : kind === 'dome' ? sw * .45 : Math.min(26, h * (table ? .45 : .5));
+      const foot = h - sh;
+      if (L.base === 'tripod') for (let k = 0; k < 3; k++) { const a = k * 2.094 + .5; strut(g, [0, foot + 2, 0], [Math.cos(a) * (w / 2 - 1), 0, Math.sin(a) * (w / 2 - 1)], table ? 1.2 : 2.2, pole); }
+      else if (L.base === 'vase') { cyl(g, w * .22, w * .28, foot * .92, 0, 0, 0, pole, 20); cyl(g, w * .1, w * .2, foot * .08 + 1, 0, foot * .92, 0, pole, 16); }
+      else if (foot > 0) { cyl(g, Math.min(w / 2 - 2, table ? 7 : 15), Math.min(w / 2 - 2, table ? 7 : 15), 2, 0, 0, 0, pole); cyl(g, table ? .8 : 1, table ? .8 : 1, foot + 1, 0, 2, 0, pole, 8); }
+      const shade = new THREE.MeshStandardMaterial({ color: c, emissive: 0xffcf8a, emissiveIntensity: .25, roughness: .9, side: THREE.DoubleSide }); shades.add(shade);
+      let sm;
+      if (kind === 'globe') { sm = new THREE.Mesh(new THREE.SphereGeometry(sw / 2, 24, 16), shade); sm.position.set(0, h - sw / 2, 0); g.add(sm); }
+      else if (kind === 'dome') { sm = new THREE.Mesh(new THREE.SphereGeometry(sw / 2, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), shade); sm.scale.y = .9; sm.position.set(0, h - sh, 0); g.add(sm); }
+      else if (kind === 'cone') sm = cyl(g, sw / 2, 3, sh, 0, foot, 0, shade, 24);
+      else sm = cyl(g, sw / 2 - 4, sw / 2, sh, 0, foot, 0, shade, 24);
+      sm.castShadow = false; // light sits inside the shade
       addLight(g, table ? 'table' : 'lamp', 0xffb870, table ? 320 : 480, 0, h - sh * .6, 0, !table);
     },
-    plant(g, w, d, h, c) { cyl(g, w * .32, w * .26, 28, 0, 0, 0, '#D9D2C7'); const s = new THREE.Mesh(new THREE.IcosahedronGeometry(w / 2, 1), M(c, { flatShading: true })); s.position.set(0, Math.max(40, h - w / 2), 0); s.scale.y = (h - 28) / w; s.castShadow = true; g.add(s); },
+    plant(g, w, d, h, c, c2, it) { // look: pot = pot diameter, potc = pot colour
+      const L = it.look || {}, pr = L.pot ? L.pot / 2 : w * .32, ph = L.pot ? Math.min(L.pot * .9, h * .3) : 28;
+      cyl(g, pr, pr * .8, ph, 0, 0, 0, L.potc || '#D9D2C7');
+      const up = h - ph, stem = h > 100 ? up * .3 : 0; // tall plants get a bare trunk below the leaves
+      if (stem) cyl(g, 1.5, 2, stem + 5, 0, ph, 0, '#6B4F2A', 8);
+      const s = new THREE.Mesh(new THREE.IcosahedronGeometry(w / 2, 1), M(c, { flatShading: true }));
+      s.position.set(0, ph + stem + (up - stem) / 2, 0); s.scale.set(1, (up - stem) / w, d / w); s.castShadow = true; g.add(s);
+    },
     tv(g, w, d, h, c) {
       box(g, w, h, d - 2, 0, 0, -1, c);
       const scr = new THREE.MeshStandardMaterial({ color: '#1B2530', emissive: 0x6f8fd8, emissiveIntensity: .03, roughness: .3 }); screens.add(scr);
@@ -1322,11 +1503,29 @@ const three = (() => {
       box(g, w, 3, d + 4, 0, 0, 0, sh(c, -.08)); box(g, w, 3, d, 0, h - 3, 0, c);
       for (let x = -w / 2 + 2; x <= w / 2 - 2; x += 7) box(g, 4, h - 6, d, x, 3, 0, c);
     },
-    screen(g, w, d, h, c) {
-      const pw = w / 3;
-      for (let k = 0; k < 3; k++) {
+    screen(g, w, d, h, c, c2, it) { // c = frame, c2 = panel fill, look.panels
+      const n = it.look?.panels || 3, pw = w / n;
+      for (let k = 0; k < n; k++) {
         const p = new THREE.Group(); p.position.x = -w / 2 + pw * (k + .5); p.rotation.y = k % 2 ? -.3 : .3; g.add(p);
-        box(p, pw - 2, h - 4, 2.5, 0, 4, 0, c); box(p, pw - 8, h - 16, 3, 0, 10, 0, '#EFE8DA');
+        box(p, pw - 2, h - 4, 2.5, 0, 4, 0, c); box(p, pw - 8, h - 16, 3, 0, 10, 0, c2 || '#EFE8DA');
+      }
+    },
+    // product desks: c = top, c2 = legs. look.legs: post | sled (U frame) | T | a | wood | panel; look.drawer: left | right | under
+    desk(g, w, d, h, c, c2, it) {
+      const L = it.look || {}, lc = c2 || STEEL, lh = h - 3, unit = { left: -1, right: 1 }[L.drawer] || 0;
+      box(g, w, 3, d, 0, lh, 0, c);
+      if (unit) box(g, 36, lh, d - 8, unit * (w / 2 - 20), 0, 0, L.legs === 'panel' ? c : lc); // drawer unit (ALEX, MALM)
+      if (unit) for (let k = 0; k < 4; k++) box(g, 32, lh / 4 - 2, 1, unit * (w / 2 - 20), 1 + k * lh / 4, d / 2 - 3.5, sh(L.legs === 'panel' ? c : lc, .04));
+      if (L.drawer === 'under') box(g, w * .5, 8, 1, 0, lh - 9, d / 2 - 4, sh(c, -.08));
+      for (const sx of [-1, 1]) {
+        if (sx === unit) continue;
+        const x = sx * (w / 2 - 6);
+        if (L.legs === 'post') for (const sz of [-1, 1]) cyl(g, 2, 2, lh, x, 0, sz * (d / 2 - 6), lc, 10);
+        if (L.legs === 'wood') for (const sz of [-1, 1]) box(g, 5, lh, 5, x, 0, sz * (d / 2 - 5), lc);
+        if (L.legs === 'panel') box(g, 3, lh, d - 4, sx * (w / 2 - 1.5), 0, 0, c);
+        if (L.legs === 'sled') { for (const sz of [-1, 1]) box(g, 4, lh, 4, x, 0, sz * (d / 2 - 5), lc); box(g, 4, 4, d - 8, x, 0, 0, lc); box(g, 4, 4, d - 8, x, lh - 4, 0, lc); }
+        if (L.legs === 'T') { box(g, 6, lh, 6, x, 0, 0, lc); box(g, 6, 3, d - 6, x, 0, 0, lc); box(g, 5, 3, d - 10, x, lh - 3, 0, lc); }
+        if (L.legs === 'a') { for (const sz of [-1, 1]) strut(g, [x, lh, sz * 3], [x, 0, sz * (d / 2 - 4)], 3, lc); box(g, 3, 3, d * .5, x, lh * .35, 0, lc); }
       }
     },
     curtain_div(g, w, d, h, c) {
@@ -1334,12 +1533,25 @@ const three = (() => {
       const cloth = M(c, { transparent: true, opacity: .93 });
       for (let x = -w / 2 + 4; x <= w / 2 - 4; x += 7) cyl(g, 3.6, 4.4, h - 6, x, 1, (Math.round(x / 7) % 2) * 3 - 1.5, cloth, 10);
     },
-    shelf(g, w, d, h, c) {
-      for (const sx of [-1, 1]) box(g, 2, h, d, sx * (w / 2 - 1), 0, 0, c);
+    shelf(g, w, d, h, c, c2, it) { // look: posts = open frame on four posts (c2), back = back panel
+      const L = it.look || {};
+      if (L.posts) for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(g, 3, h, 3, sx * (w / 2 - 1.5), 0, sz * (d / 2 - 1.5), c2 || c);
+      else for (const sx of [-1, 1]) box(g, 2, h, d, sx * (w / 2 - 1), 0, 0, c);
+      if (L.back) box(g, w - 4, h - 2, 1, 0, 0, -d / 2 + .5, sh(c, -.04));
       const n = Math.max(2, Math.round(h / 38)), books = ['#6F7C8A', '#A55C45', '#E9E2D2', '#56694F'];
       for (let k = 0; k <= n; k++) { const y = k * (h - 2) / n; box(g, w - 4, 2, d, 0, y, 0, c); if (k < n && k % 2 === 0) box(g, w * .45, (h / n) * .7, d * .7, -w * .2 + k * 4, y + 2, 0, books[k % 4]); }
     },
-    bedbench(g, w, d, h, c) { box(g, w, 5, d, 0, h - 5, 0, c); for (const sx of [-1, 1]) box(g, 4, h - 5, d - 4, sx * (w / 2 - 8), 0, 0, c); },
+    bedbench(g, w, d, h, c, c2, it) { // look: legs panel (default) | post | a; shelf = slatted lower shelf; soft = upholstered top
+      const L = it.look || {}, lc = c2 || c, t = L.soft ? 10 : 5, lh = h - t;
+      box(g, w, t, d, 0, lh, 0, c);
+      for (const sx of [-1, 1]) {
+        const x = sx * (w / 2 - 8);
+        if (L.legs === 'post') for (const sz of [-1, 1]) box(g, 4, lh, 4, x, 0, sz * (d / 2 - 4), lc);
+        else if (L.legs === 'a') for (const sz of [-1, 1]) strut(g, [x, lh, sz * 4], [x, 0, sz * (d / 2 - 2)], 3.5, lc);
+        else box(g, 4, lh, d - 4, x, 0, 0, lc);
+      }
+      if (L.shelf) for (let z = -d / 2 + 5; z <= d / 2 - 5; z += 5) box(g, w - 18, 1.5, 3, 0, 10, z, c);
+    },
   };
   B.kallax5 = B.kallax;
   setMood();
@@ -1350,12 +1562,12 @@ const three = (() => {
     const seen = new Set();
     for (const it of list) {
       seen.add(it.id);
-      const key = [it.type, it.w, it.d, it.h, it.color, it.color2, it.style, it.aim].join('|');
+      const key = [it.type, it.w, it.d, it.h, it.color, it.color2, it.style, it.aim, it.pick].join('|');
       let g = groups.get(it.id);
       if (!g || g.userData.key !== key) {
         if (g) scene.remove(g);
         g = new THREE.Group(); g.userData.key = key;
-        B[it.type](g, it.w, it.d, it.h, it.color || T[it.type].color, it.color2 || T[it.type].c2, it);
+        B[it.look?.build || it.type](g, it.w, it.d, it.h, it.color || T[it.type].color, it.color2 || T[it.type].c2, it);
         scene.add(g); groups.set(it.id, g);
       }
       g.position.set(it.x, T[it.type].rug ? 0.2 : it.z || 0, it.y);
@@ -1393,7 +1605,7 @@ const three = (() => {
 // ---------- glue ----------
 function renderAll(save = true) {
   curIssues = issues(items);
-  renderPlan(); renderIssues(); fillEditor();
+  renderPlan(); renderIssues(); fillEditor(); renderShop();
   three.sync(items, selId);
   if (save) persist();
 }
