@@ -3,7 +3,9 @@
 const fs = require('fs'), assert = require('assert');
 const core = fs.readFileSync(__dirname + '/room.html', 'utf8').match(/<script id="core">([\s\S]*?)<\/script>/)[1];
 global.window = {}; require('./products.js');
-const { PRESETS, P, applyProduct, catOf, aabb, ROOM } = new Function(core + '; return { PRESETS, P, applyProduct, catOf, aabb, ROOM };')();
+const { PRESETS, P, applyProduct, catOf, aabb, ROOM, ACCENT, themed, greenery, issues, PAL, GEM } = new Function(core + '; return { PRESETS, P, applyProduct, catOf, aabb, ROOM, ACCENT, themed, greenery, issues, PAL, GEM };')();
+const styleKeys = [PAL, GEM, ACCENT].flatMap(Object.keys);
+assert.equal(new Set(styleKeys).size, styleKeys.length, 'two styles share a key, the Style menu would pick the wrong one');
 
 for (const p of Object.values(window.PRODUCTS).flat()) {
   for (const k of ['w', 'd', 'h']) assert(p[k] === undefined || p[k] > 0, `${p.id}: bad ${k}`);
@@ -20,4 +22,11 @@ for (const list of Object.values(PRESETS)) for (const orig of list) for (const p
 // a wardrobe standing against the wardrobe wall keeps its back on that wall when it gets deeper
 const w = applyProduct(P('wardrobe', 327, 284, 90), window.PRODUCTS.wardrobe.find(p => p.d > 58));
 assert(Math.abs(aabb(w).x1 - ROOM.w) < .01, 'deeper wardrobe left the wall');
-console.log(`ok: ${Object.values(window.PRODUCTS).flat().length} products, ${n} swaps`);
+// plants a style adds never create a new problem or warning
+let plants = 0;
+for (const [name, list] of Object.entries(PRESETS)) for (const pal of Object.values(ACCENT)) {
+  const l = themed(pal, structuredClone(list)), before = issues(l).length, added = greenery(l, pal.plants, pal);
+  assert(added <= pal.plants && issues(l).length <= before, `plants for ${pal.label} add problems in ${name}`);
+  plants += added;
+}
+console.log(`ok: ${Object.values(window.PRODUCTS).flat().length} products, ${n} swaps, ${plants} plants placed`);

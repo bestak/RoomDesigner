@@ -347,18 +347,31 @@ const GEM = {
   green:  { label: 'green oak & forest',        wood: '#D8B887', fabric: '#4F6B4A', rug1: '#9AA68A', rug2: '#E6DCC8', bedding: '#9AA68A', shade: '#F3E7CB', curtain: '#E9E2D2', win: ['linen', '#4F6B4A'], top: '#D8B887', legs: '#7A4E2D' },
   dark:   { label: 'dark espresso & clay',      wood: '#3F2B20', fabric: '#C98B6B', rug1: '#45494D', rug2: '#A9573A', bedding: '#45494D', shade: '#E8C98F', curtain: '#45494D', win: ['double', '#45494D'], top: '#5B3B2C', legs: '#26282B' },
 };
+// oaks for the big pieces, walnuts for the small ones, each kind a little different, like furniture bought over the years
+const WOOD_MIX = { wardrobe: '#C49A6C', kallax: '#B48A5E', kallax5: '#B48A5E', dresser: '#D2A977', shelf: '#A67C52', slats: '#C9A273', screen: '#BD9366', chair: '#B08657', nightstand: '#6E4A30', coffee: '#7D5638', wallshelf: '#5C3D29', bedbench: '#8A6242' };
+// accent comparison: the same woods and black, only the accent changes. seat = desk chair, leaf/pot = plants, plants = how many to add
+// each accent is a family of shades: a pale tint on the curtains, mid tones on the bed and chairs, a deeper muted one on the bedroom rug;
+// the desk rug (rug1) stays neutral
+const MIXED = { wood: '#C49A6C', woods: WOOD_MIX, wood2: '#9C7048', top: '#BF9464', legs: '#26282B', rug1: '#CFC3AE' };
+const ACCENT = {
+  accentBlue: { label: 'Oak + walnut · dusty blue & plants', ...MIXED, curtain: '#CDD5DC', win: ['linen', '#CDD5DC'], bedding: '#98A7B6', seat: '#A9B8C6', fabric: '#6F8296', rug2: '#7D8FA1', shade: '#F3E7CB', leaf: '#4A6B3F', pot: '#E9E2D2', plants: 5 },
+  accentOlive: { label: 'Oak + walnut · olive', ...MIXED, curtain: '#D3D5BC', win: ['linen', '#D3D5BC'], bedding: '#9AA68A', seat: '#26282B', fabric: '#5F6B3E', rug2: '#7E8660', shade: '#F3E7CB', leaf: '#5D7A45', pot: '#E9E2D2', plants: 3 },
+  accentClay: { label: 'Oak + walnut · olive & terracotta', ...MIXED, curtain: '#E6CDBB', win: ['linen', '#E6CDBB'], bedding: '#A7AE93', seat: '#26282B', fabric: '#76804F', rug2: '#A9573A', shade: '#F1E0C0', leaf: '#5D7A45', pot: '#B5613F', plants: 4 },
+};
 const WOODY = ['wallshelf', 'wardrobe', 'dresser', 'kallax', 'kallax5', 'coffee', 'chair', 'shelf', 'slats', 'screen', 'bedbench'];
 function themed(pal, list) {
   let rugs = 0;
   for (const it of list) {
     if (it.pick) continue; // a real product keeps its own colours
-    if (WOODY.includes(it.type)) it.color = pal.wood;
+    if (WOODY.includes(it.type)) it.color = pal.woods?.[it.type] || pal.wood; // woods: a slightly different tone per kind of piece
     else if (it.type === 'armchair') { it.color = pal.fabric; it.color2 = pal.wood2 || pal.wood; }
     else if (it.type === 'rug') it.color = rugs++ ? pal.rug2 : pal.rug1;
     else if (it.type === 'bed') it.color2 = pal.bedding;
     else if (it.type === 'lamp') it.color = pal.shade;
     else if (it.type === 'curtain_div') it.color = pal.curtain;
     else if (it.type === 'desk_trestle') { it.color = pal.top || pal.wood; it.color2 = pal.legs || '#6B4428'; }
+    else if (it.type === 'office' && pal.seat) it.color = pal.seat;
+    else if (it.type === 'plant') { if (pal.leaf) it.color = pal.leaf; if (pal.pot) it.potc = pal.pot; }
   }
   const c = list.find(i => i.type === 'curtains');
   if (c) Object.assign(c, { style: pal.win[0], color: pal.win[1] });
@@ -367,6 +380,28 @@ function themed(pal, list) {
 }
 const STYLE_OF = {}; // preset name -> its own style key
 const styleKey = (pal) => Object.keys(PAL).find(k => PAL[k] === pal) || Object.keys(GEM).find(k => GEM[k] === pal);
+const palette = (k) => PAL[k] || GEM[k] || ACCENT[k];
+// plants for a style: tried along the walls every 20 cm, at least 90 cm apart, kept only where they add no new problem or warning
+function greenery(list, n, pal) {
+  const base = issues(list).length, placed = [], spots = [];
+  for (let t = 40; t <= ROOM.d - 40; t += 20) spots.push([25, t], [ROOM.w - 25, t]);
+  for (let t = 45; t <= ROOM.w - 45; t += 20) spots.push([t, 25], [t, ROOM.d - 40]);
+  const solid = list.filter(o => !T[o.type].rug && !T[o.type].light && !T[o.type].fixed && !(o.z > 0));
+  const plant = (x, y, big, z) => P('plant', x, y, 0, { name: big ? 'Tall plant' : z ? 'Small plant' : 'Plant', w: big ? 45 : z ? 28 : 35, d: big ? 45 : z ? 28 : 35, h: big ? 140 : z ? 40 : 80, ...(z ? { z } : {}), color: pal.leaf, potc: pal.pot, greenery: true });
+  const tryAdd = (p) => {
+    if (placed.some(q => Math.hypot(q.x - p.x, q.y - p.y) < 90) || (!p.z && [...solid, DOOR_ZONE, CURTAIN].some(o => overlap(p, o)))) return; // quick tests first
+    list.push(p);
+    if (issues(list).length > base) list.pop(); else { p.id += '-' + Date.now(); placed.push(p); } // saved layouts keep these, so the id must not repeat later
+  };
+  for (const [x, y] of spots) { if (placed.length >= n) break; tryAdd(plant(x, y, placed.length % 2 === 0)); }
+  // walls full: small plants on top of storage, at either end of the top
+  for (const o of solid.filter(o => ['kallax', 'kallax5', 'dresser', 'shelf', 'wardrobe'].includes(o.type))) for (const s of [-1, 1]) {
+    if (placed.length >= n) break;
+    const t = o.rot * Math.PI / 180, k = s * (o.w / 2 - 15);
+    tryAdd(plant(o.x + k * Math.cos(t), o.y + k * Math.sin(t), false, o.h));
+  }
+  return placed.length;
+}
 function styled(pal, name, list) { STYLE_OF[name] = styleKey(pal); return themed(pal, list); }
 const TL = (x, y) => P('lamp', x, y, 0, { name: 'Table lamp', w: 22, d: 22, h: 42, z: 55 }); // sits on the nightstand
 const TALL = (x, y, w = 45, h = 140) => P('plant', x, y, 0, { name: 'Tall plant', w, d: w, h });
@@ -865,7 +900,7 @@ function persist() { store.set('room.current', { key: layoutKey, items, style })
 {
   const s = $('#styleSel');
   s.append(new Option("Layout's own colours", ''));
-  for (const [label, group] of [['Japandi & Scandi', GEM], ['More styles', PAL]]) {
+  for (const [label, group] of [['Accent: blue or olive', ACCENT], ['Japandi & Scandi', GEM], ['More styles', PAL]]) {
     const g = document.createElement('optgroup'); g.label = label;
     for (const k in group) g.append(new Option(group[k].label.replace(/^./, c => c.toUpperCase()), k));
     s.append(g);
@@ -873,11 +908,12 @@ function persist() { store.set('room.current', { key: layoutKey, items, style })
   s.value = style;
   s.onchange = () => {
     style = s.value;
-    if (style) themed(PAL[style] || GEM[style], items);
+    items = items.filter(i => !i.greenery); // plants a previous style added
+    if (style) { const pal = palette(style); themed(pal, items); if (pal.plants) greenery(items, pal.plants, pal); }
     else { // back to the layout's own colours, keeping any furniture you moved
       const src = layoutKey.startsWith('p:') ? withCurtains(clone(PRESETS[layoutKey.slice(2)] || [])) : [];
       const own = new Map(src.map(i => [i.id, i]));
-      for (const it of items) { if (it.pick) continue; const o = own.get(it.id) || { type: it.type }; for (const k of ['color', 'color2', 'style']) if (o[k] !== undefined || k !== 'style') { if (o[k] === undefined) delete it[k]; else it[k] = o[k]; } }
+      for (const it of items) { if (it.pick) continue; const o = own.get(it.id) || { type: it.type }; for (const k of ['color', 'color2', 'style', 'potc']) if (o[k] !== undefined || k !== 'style') { if (o[k] === undefined) delete it[k]; else it[k] = o[k]; } }
     }
     renderEditor(); renderAll();
   };
@@ -1436,8 +1472,8 @@ const three = (() => {
       addLight(g, table ? 'table' : 'lamp', 0xffb870, table ? 320 : 480, 0, h - sh * .6, 0, !table);
     },
     plant(g, w, d, h, c, c2, it) { // look: pot = pot diameter, potc = pot colour
-      const L = it.look || {}, pr = L.pot ? L.pot / 2 : w * .32, ph = L.pot ? Math.min(L.pot * .9, h * .3) : 28;
-      cyl(g, pr, pr * .8, ph, 0, 0, 0, L.potc || '#D9D2C7');
+      const L = it.look || {}, pr = L.pot ? L.pot / 2 : Math.min(w * .32, 12), ph = L.pot ? Math.min(L.pot * .9, h * .3) : Math.min(28, h * .35);
+      cyl(g, pr, pr * .8, ph, 0, 0, 0, L.potc || it.potc || '#D9D2C7');
       const up = h - ph, stem = h > 100 ? up * .3 : 0; // tall plants get a bare trunk below the leaves
       if (stem) cyl(g, 1.5, 2, stem + 5, 0, ph, 0, '#6B4F2A', 8);
       const s = new THREE.Mesh(new THREE.IcosahedronGeometry(w / 2, 1), M(c, { flatShading: true }));
@@ -1562,7 +1598,7 @@ const three = (() => {
     const seen = new Set();
     for (const it of list) {
       seen.add(it.id);
-      const key = [it.type, it.w, it.d, it.h, it.color, it.color2, it.style, it.aim, it.pick].join('|');
+      const key = [it.type, it.w, it.d, it.h, it.color, it.color2, it.style, it.aim, it.pick, it.potc].join('|');
       let g = groups.get(it.id);
       if (!g || g.userData.key !== key) {
         if (g) scene.remove(g);
