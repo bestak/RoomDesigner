@@ -8,6 +8,10 @@ A small single-file tool for planning one real room: a draggable top-down plan, 
 
 Open `room.html` in a browser. There's no build step and nothing to install. The 3D view loads three.js from a CDN, so it needs an internet connection; the plan and checks work without it.
 
+### AR on a phone
+
+Every push to `main` publishes the planner to GitHub Pages (`.github/workflows/pages.yml`). AR needs HTTPS, so it works there but not from a local file. Open the Pages URL in Chrome on an ARCore phone and press **AR** in the 3D pane. Move the phone slowly so it finds the floor, then tap the floor in the corner where the door wall meets the piano wall, and then in the corner where it meets the wardrobe wall. The furniture appears where the plan puts it. Check the measured distance against 3.56 m, use the 0.5° buttons to fine-tune the rotation, or press Redo. The alignment isn't remembered, so you tap again in each session.
+
 ## What it does
 
 - **Plan:** drag, rotate and resize furniture in centimetres. Pieces snap to walls, and each one shows the space it needs in front.

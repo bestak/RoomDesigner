@@ -1,3 +1,4 @@
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Room Planner 565×356</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -37,6 +38,11 @@ button.primary{background:var(--accent);color:var(--accent-ink);border-color:var
 button.danger{color:var(--err)}
 button:disabled{opacity:.45;cursor:default}
 select,input,textarea{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 8px;min-width:0}
+#arUi{position:fixed;inset:0;display:flex;flex-direction:column;justify-content:space-between;padding:16px;pointer-events:none;color:#fff;font:15px/1.4 var(--sans)}
+#arUi[hidden]{display:none}
+#arMsg{margin:0;padding:8px 12px;background:rgba(0,0,0,.6);border-radius:8px;align-self:flex-start}
+#arUi .ar-bar{display:flex;gap:8px;flex-wrap:wrap;pointer-events:auto}
+#arUi button{padding:10px 14px;font-size:15px}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 .bar{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between;margin-bottom:12px}
@@ -130,6 +136,13 @@ select,input,textarea{background:var(--panel);border:1px solid var(--line);borde
 .p-item.bad .p-body{stroke:var(--err);stroke-width:2.2;stroke-dasharray:4 2}
 .p-label{font:600 8.5px var(--sans);pointer-events:none;text-anchor:middle;dominant-baseline:middle}
 .p-clear{fill:rgba(47,111,106,.10);stroke:var(--accent);stroke-width:.8;stroke-dasharray:3 2;pointer-events:none}
+.p-cable{stroke:#5B6470;stroke-width:1.2;stroke-dasharray:3 2;pointer-events:none;fill:none}
+.p-channel{stroke:#E0701F;stroke-width:3.2;stroke-linecap:round;pointer-events:none;fill:none}
+.p-socket{fill:#D8262E;stroke:#fff;stroke-width:1.5;cursor:grab}
+.p-climb{font:600 7px var(--sans);fill:#B4541A;pointer-events:none}
+#powerBox .row{display:flex;justify-content:space-between;font-size:12.5px}
+#powerBox .key{display:flex;gap:12px;font-size:11.5px;color:var(--muted);align-items:center;flex-wrap:wrap}
+#powerBox .key i{display:inline-block;width:18px;height:0;vertical-align:middle;margin-right:4px}
 
 /* 3D-only view: the top bar (layout, style) stays, plan and side panel hide */
 body.focus3d .work{grid-template-columns:minmax(0,1fr);height:calc(100% - 64px)}
@@ -181,6 +194,7 @@ body.focus3d .pane{height:auto}
       <h2>Plan · door at top, window at bottom</h2>
       <div class="tools">
         <label><input type="checkbox" id="showClear" checked> Clearance zones</label>
+        <label><input type="checkbox" id="showPower"> Cables</label>
       </div>
     </div>
     <svg id="plan" viewBox="-34 -30 424 628" preserveAspectRatio="xMidYMid meet" aria-label="Top-down floor plan"></svg>
@@ -194,6 +208,7 @@ body.focus3d .pane{height:auto}
         <button data-cam="window">From window</button>
         <button data-cam="top">Top</button>
         <span class="seg" role="group" aria-label="Light"><button data-mood="day">Day</button><button data-mood="evening">Evening</button><button data-mood="night">Night</button><button data-mood="main" title="Ceiling light on, for cleaning">Main light</button></span>
+        <button id="arBtn" hidden title="Walk around the room with the furniture in place (Chrome on Android)">AR</button>
         <button id="focusBtn" aria-pressed="false" title="Show only the 3D view (Esc to go back)">Expand</button>
       </div>
     </div>
@@ -207,6 +222,7 @@ body.focus3d .pane{height:auto}
     </div>
     <div class="card" id="editBox"></div>
     <div class="card" id="shop"></div>
+    <div class="card" id="powerBox" hidden></div>
     <div class="card">
       <h2>Add furniture</h2>
       <div class="btnrow">
@@ -249,6 +265,7 @@ const T = {
   nightstand: { name: 'Nightstand',   w: 40,  d: 48,  h: 55,  color: '#5B3B2C', ink: '#fff' },
   dresser:    { name: 'Dresser',      w: 80,  d: 48,  h: 100, color: '#DCC08F', clear: 50 },
   wardrobe:   { name: 'Wardrobe',     w: 120, d: 58,  h: 201, color: '#C69763', clear: 60 },
+  wardrobe_top: { name: 'Wardrobe top', w: 97, d: 50, h: 41,  z: 176, color: '#C69763', wall: 1 }, // sits on a wardrobe, z = its height
   kallax:     { name: 'KALLAX 4×4',   w: 147, d: 39,  h: 147, color: '#E4CB9B' },
   kallax5:    { name: 'KALLAX 5×5',   w: 182, d: 39,  h: 182, color: '#E4CB9B' },
   armchair:   { name: 'Armchair',     w: 70,  d: 75,  h: 80,  color: '#76804F', ink: '#fff', c2: '#D2AE7C' },
@@ -300,7 +317,7 @@ const BASE = {
   'A · Bed on the piano wall': [
     ...WORK_W(25), ...EAST(),
     P('bed', 102, 495.5, 270), P('nightstand', 24, 420, 270), P('kallax', 73.5, 359.5, 0),
-    ...READ_SE(0), P('tv', 353, 486, 90),
+    ...READ_SE(0), P('coffee', 240, 440, 0, { name: 'Chess table', w: 55, d: 55, chess: true }), P('tv', 353, 486, 90),
   ],
   'B · Bed alcove by the door': [
     P('bed', 49.5, 102, 180), P('nightstand', 123, 184, 270), P('kallax', 73.5, 229.5, 0),
@@ -554,7 +571,37 @@ const NEAR_DOOR = Object.fromEntries([
     P('desk_wood', 323.5, 420, 90), P('chair', 270, 420, 270), P('lamp', 340, 530), RUG2(200, 140, 150, 200),
   ]],
 ].map(([name, pal, list]) => [name, styled(pal, name, list)]));
-const PRESETS = { ...BASE, ...ZONED, ...GEMINI_VARIANTS, ...NEAR_DOOR };
+// ---- variations on A: bed on the piano wall, both desks where they are in A, the piano tries the work and the sleeping zone ----
+// the 130 cm wardrobe hides the east door fully, so the dresser moves off the wardrobe wall's door end
+const A_DESKS = () => [P('desk_black', 40, 238.5, 270), P('office', 115, 238.5, 90), P('rug', 90, 238.5, 0, { w: 180, d: 186 }), ...WD(), W130()];
+const A_BED = () => [P('bed', 102, 495.5, 270), P('nightstand', 24, 420, 270)];
+const PIANO_A = () => [P('piano', 12, 89, 270), P('bench', 58, 89, 270)]; // as in A, by the door
+const A_VARIANTS = {
+  'A1 · Piano at the foot of the bed, armchair by the door': [
+    ...A_DESKS(), P('armchair', 37.5, 80, 270), P('coffee', 105, 100, 0, { name: 'Chess table', w: 55, d: 55, chess: true }), P('lamp', 20, 135),
+    ...A_BED(), P('kallax', 73.5, 359.5, 0),
+    P('piano', 216, 485, 270), P('bench', 246, 485, 270), P('dresser', 332, 395, 90), P('tv', 353, 486, 90, { z: 110 }),
+  ],
+  'A2 · Piano by the window on the wardrobe wall': [
+    ...A_DESKS(), P('dresser', 24, 80, 270),
+    ...A_BED(), P('kallax', 73.5, 359.5, 0),
+    P('piano', 344, 411, 90), P('bench', 298, 411, 270), P('armchair', 315, 512, 180), P('coffee', 245, 485, 0, { name: 'Chess table', w: 55, d: 55, chess: true }), P('lamp', 260, 530),
+  ],
+  'A3 · Piano as a low divider, KALLAX by the door': [
+    ...A_DESKS(), P('kallax', 19.5, 79, 270),
+    P('piano', 200, 370, 0), P('bench', 200, 402, 0), ...A_BED(),
+    P('dresser', 332, 425, 90), P('tv', 353, 425, 90, { z: 110 }), P('armchair', 315, 512, 180), P('coffee', 245, 495, 0, { name: 'Chess table', w: 55, d: 55, chess: true }),
+  ],
+  'A4 · Piano by the door, KALLAX 5×5 wall': [
+    ...PIANO_A(), ...A_DESKS(), P('kallax5', 91, 359.5, 0), ...A_BED(), P('dresser', 332, 415, 90), P('tv', 353, 415, 90, { z: 110 }),
+    P('armchair', 315, 512, 180), P('coffee', 245, 485, 0, { name: 'Chess table', w: 55, d: 55, chess: true }), P('lamp', 260, 530),
+  ],
+  'A5 · Piano by the door, dresser behind the bed, KALLAX by the window': [
+    ...PIANO_A(), ...A_DESKS(), P('dresser', 104, 365, 0), ...A_BED(),
+    P('kallax', 336.5, 420.5, 90), P('armchair', 250, 495, 200), P('coffee', 270, 425, 0, { name: 'Chess table', w: 55, d: 55, chess: true }), P('lamp', 300, 535),
+  ],
+};
+const PRESETS = { ...BASE, ...A_VARIANTS, ...ZONED, ...GEMINI_VARIANTS, ...NEAR_DOOR };
 
 // atmosphere: warm LED strips where they make sense, plus a table lamp on the dresser
 const LED = (x, y, rot, name, w, z, aim) => P('led', x, y, rot, { name, w, z, aim });
@@ -587,6 +634,18 @@ function aabb(r) {
   const cs = corners(r), xs = cs.map(p => p[0]), ys = cs.map(p => p[1]);
   return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
 }
+// AR: the two floor corners you tap, in plan cm (door wall with the piano wall, then with the wardrobe wall)
+const AR_PTS = [{ x: 0, y: 0 }, { x: ROOM.w, y: 0 }];
+// scene transform (scale 0.01, yaw about the up axis, pos in m) that puts plan points p1, p2 on the real floor hits h1, h2.
+// three's rotation.y turns the x→z direction by -yaw. dyaw turns the room about h1 for fine-tuning.
+function align(p1, p2, h1, h2, dyaw = 0) {
+  const yaw = Math.atan2(p2.y - p1.y, p2.x - p1.x) - Math.atan2(h2.z - h1.z, h2.x - h1.x) + dyaw, c = Math.cos(yaw), s = Math.sin(yaw);
+  return {
+    yaw, measured: Math.hypot(h2.x - h1.x, h2.z - h1.z) * 100,
+    pos: { x: h1.x - (p1.x * c + p1.y * s) / 100, y: (h1.y + h2.y) / 2, z: h1.z - (p1.y * c - p1.x * s) / 100 },
+  };
+}
+
 // separating-axis test; touching (< 0.5 cm overlap) counts as fine
 function overlap(a, b) {
   const A = corners(a), B = corners(b);
@@ -809,8 +868,81 @@ function unreachable(items, g) {
     return true;
   });
 }
+
+// ---- power: the least cable from the wall sockets to every lamp, LED strip and the TV ----
+// Cables run along the skirting. s = position along the walls, clockwise from the corner of the piano wall and the door wall.
+// Each plug drops straight to its nearest wall and climbs the wall to things that hang (TV, LED strips).
+const DEFAULT_SOCKETS = [{ x: 269, y: 0 }, { x: 0, y: 125 }, { x: ROOM.w, y: 534 }]; // from the photo of the plan
+const LOOP = 2 * (ROOM.w + ROOM.d), OVER_DOOR = 2 * 228; // nothing lies across the doorway: up the frame and down again
+function toWall(x, y) { // [distance to the nearest wall, s of the point on it]
+  const W = ROOM.w, D = ROOM.d; x = Math.min(W, Math.max(0, x)); y = Math.min(D, Math.max(0, y));
+  return [[y, x], [W - x, W + y], [D - y, 2 * W + D - x], [x, 2 * W + 2 * D - y]].reduce((a, b) => b[0] < a[0] ? b : a);
+}
+function atWall(s, inset = 0) {
+  const W = ROOM.w, D = ROOM.d; s = ((s % LOOP) + LOOP) % LOOP;
+  if (s < W) return { x: s, y: inset };
+  if (s < W + D) return { x: W - inset, y: s - W };
+  if (s < 2 * W + D) return { x: 2 * W + D - s, y: D - inset };
+  return { x: inset, y: 2 * W + 2 * D - s };
+}
+function along(a, b) { // the cheaper way round from a to b: { len, dir, over (goes over the door), cost }
+  const f = ((b - a) % LOOP + LOOP) % LOOP, door = (DOOR.x0 + DOOR.x1) / 2;
+  return [[f, 1, a], [LOOP - f, -1, b]].map(([len, dir, start]) => {
+    const over = ((door - start) % LOOP + LOOP) % LOOP < len;
+    return { len, dir, over, cost: len + (over ? OVER_DOOR : 0) };
+  }).reduce((p, q) => q.cost < p.cost ? q : p);
+}
+const inside = (o, x, y) => { const t = o.rot * Math.PI / 180, dx = x - o.x, dy = y - o.y; return Math.abs(dx * Math.cos(t) + dy * Math.sin(t)) <= o.w / 2 && Math.abs(-dx * Math.sin(t) + dy * Math.cos(t)) <= o.d / 2; };
+function power(all, sockets) {
+  // what hides a cable: furniture standing against the wall (not lamps, plants or chairs)
+  const hide = all.filter(o => { const t = T[o.type]; return !t.rug && !t.light && !t.fixed && !t.round && !t.chair && !(o.z > 0); });
+  const cover = (s) => { const p = atWall(s); let h = 0; for (const o of hide) { const b = aabb(o); if (p.x >= b.x0 - 8 && p.x <= b.x1 + 8 && p.y >= b.y0 - 8 && p.y <= b.y1 + 8) h = Math.max(h, o.h); } return h; };
+  const plugs = [];
+  for (const o of all) {
+    if (o.type === 'lamp' || o.type === 'tv') plugs.push({ o, x: o.x, y: o.y, z: o.z || 0 });
+    if (o.type === 'led') { // plugged in at the end nearer a wall
+      const t = o.rot * Math.PI / 180, dx = Math.cos(t) * o.w / 2, dy = Math.sin(t) * o.w / 2;
+      const [x, y] = [[o.x - dx, o.y - dy], [o.x + dx, o.y + dy]].reduce((a, b) => toWall(...b)[0] < toWall(...a)[0] ? b : a);
+      plugs.push({ o, x, y, z: o.z || 0 });
+    }
+  }
+  for (const p of plugs) [p.d, p.s] = toWall(p.x, p.y);
+  const socks = sockets.map(k => toWall(k.x, k.y)[1]);
+  // Prim's minimum spanning tree, grown from all sockets at once: each plug hangs off a socket or off another plug's cable
+  const n = plugs.length, done = new Array(n).fill(false), runs = [];
+  const best = plugs.map(p => socks.reduce((b, s, k) => { const w = along(s, p.s); return w.cost < b.cost ? { ...w, from: s, sock: k } : b; }, { cost: Infinity }));
+  for (let k = 0; k < n; k++) {
+    let i = -1;
+    for (let j = 0; j < n; j++) if (!done[j] && (i < 0 || best[j].cost < best[i].cost)) i = j;
+    if (i < 0 || best[i].cost === Infinity) break; // no sockets
+    done[i] = true; runs.push({ ...best[i], to: i });
+    for (let j = 0; j < n; j++) if (!done[j]) { const w = along(plugs[i].s, plugs[j].s); if (w.cost < best[j].cost) best[j] = { ...w, from: plugs[i].s, parent: i }; }
+  }
+  // lay it out: 5 cm pieces along the walls, visible where nothing stands in front of the wall
+  const pieces = [], climbs = []; let cable = 0, channel = 0;
+  const add = (a, b, vis) => { const L = Math.hypot(b.x - a.x, b.y - a.y); pieces.push({ a, b, vis }); cable += L; if (vis) channel += L; };
+  for (const r of runs) {
+    for (let t = 0; t < r.len; t += 5) { const s1 = r.from + r.dir * t, s2 = r.from + r.dir * Math.min(r.len, t + 5); add(atWall(s1, 3), atWall(s2, 3), !cover((s1 + s2) / 2)); }
+    if (r.over) { cable += OVER_DOOR; channel += OVER_DOOR; }
+  }
+  for (const p of plugs) {
+    const w = atWall(p.s, 3), mid = { x: (p.x + w.x) / 2, y: (p.y + w.y) / 2 };
+    if (p.d > 3) add({ x: p.x, y: p.y }, w, !hide.some(o => inside(o, mid.x, mid.y))); // across the floor or the top it stands on
+    const up = Math.max(0, p.z - cover(p.s));
+    cable += p.z; channel += up;
+    if (up > 5) climbs.push({ name: p.o.name, up: Math.round(up), at: w, from: p.z - up, to: p.z });
+  }
+  // splitters: a socket feeding more than one cable, or a plug the cable carries on from
+  const uses = {}; for (const r of runs) { const k = r.parent ?? 's' + r.sock; uses[k] = (uses[k] || 0) + 1; }
+  const splits = Object.entries(uses).filter(([k, v]) => k[0] === 's' ? v > 1 : v >= 1).length;
+  return { plugs, runs, pieces, climbs, cable, channel, splits, over: runs.filter(r => r.over).length };
+}
 </script>
 
+<div id="arUi" hidden>
+  <p id="arMsg"></p>
+  <div class="ar-bar"><button id="arRedo">Redo</button><button id="arL">⟲ 0.5°</button><button id="arR">⟳ 0.5°</button><button id="arExit" class="primary">Exit</button></div>
+</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/lights/RectAreaLightUniformsLib.js"></script>
@@ -833,7 +965,7 @@ let items = withCurtains(cur.items), layoutKey = cur.key, style = cur.style || '
 // ---------- layout select / save / load ----------
 function fillSelect() {
   const s = $('#layoutSel'); s.innerHTML = '';
-  for (const [label, group] of [['Your plan and first ideas', BASE], ['Zoned + feng shui', ZONED], ['Gemini render, trestle desk', GEMINI_VARIANTS], ['Mixed: desk by the window', NEAR_DOOR]]) {
+  for (const [label, group] of [['Your plan and first ideas', BASE], ['Variations on A', A_VARIANTS], ['Zoned + feng shui', ZONED], ['Gemini render, trestle desk', GEMINI_VARIANTS], ['Mixed: desk by the window', NEAR_DOOR]]) {
     const g = document.createElement('optgroup'); g.label = label;
     for (const k of Object.keys(group)) g.append(new Option(k, 'p:' + k));
     s.append(g);
@@ -956,6 +1088,7 @@ function drawStatic() {
   const d2 = el('text', { x: 40, y: -16, class: 'p-dim', 'text-anchor': 'middle' }, g); d2.textContent = '356';
   el('g', { id: 'clears' }, svg);
   el('g', { id: 'items' }, svg);
+  el('g', { id: 'power' }, svg);
 }
 function lum(hex) { const n = parseInt(hex.slice(1), 16); return ((n >> 16) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000; }
 
@@ -983,7 +1116,7 @@ function renderPlan() {
       continue;
     }
     const g = el('g', { class: 'p-item' + (it.id === selId ? ' sel' : '') + (bad.has(it.id) ? ' bad' : ''), 'data-id': it.id, transform: `translate(${it.x} ${it.y}) rotate(${it.rot})` }, gi);
-    if (it.type === 'wallshelf') { el('rect', { x: -it.w / 2, y: -it.d / 2, width: it.w, height: it.d, fill: color, 'fill-opacity': .45, class: 'p-body', 'stroke-dasharray': '2 2' }, g); continue; }
+    if (it.type === 'wallshelf' || it.type === 'wardrobe_top') { el('rect', { x: -it.w / 2, y: -it.d / 2, width: it.w, height: it.d, fill: color, 'fill-opacity': .45, class: 'p-body', 'stroke-dasharray': '2 2' }, g); continue; }
     if (t.round && it.look?.shape !== 'rect') el('ellipse', { rx: it.w / 2, ry: it.d / 2, fill: color, class: 'p-body' }, g);
     else el('rect', { x: -it.w / 2, y: -it.d / 2, width: it.w, height: it.d, rx: t.rug ? 2 : 1, fill: color, class: 'p-body', 'fill-opacity': t.rug ? .75 : 1 }, g);
     if (it.type === 'bed') {
@@ -999,17 +1132,55 @@ function renderPlan() {
   }
   // labels on top, unrotated
   for (const it of items) {
-    const t = T[it.type]; if (t.rug || t.fixed || t.light || it.type === 'wallshelf') continue;
+    const t = T[it.type]; if (t.rug || t.fixed || t.light || it.type === 'wallshelf' || it.type === 'wardrobe_top') continue;
     if (Math.min(it.w, it.d) < 30 && it.type !== 'piano' && !t.wall && !t.lab) continue;
     const tx = el('text', { x: it.x, y: it.y, class: 'p-label', fill: t.rug ? 'var(--ink)' : (lum(it.color || t.color) < 110 ? '#fff' : '#1E2522') }, gi);
     tx.textContent = it.name;
   }
+  renderPower();
 }
+
+// cables: channels where they'd be seen, plain cable behind furniture; the red sockets can be dragged along the walls
+let sockets = store.get('room.sockets', DEFAULT_SOCKETS), dragSock = null;
+function renderPower() {
+  const g = $('#power'), box = $('#powerBox'), on = $('#showPower').checked;
+  g.innerHTML = ''; box.hidden = !on;
+  if (!on) { three.cables(null); return; }
+  const pw = power(items, sockets), m = (cm) => (cm / 100).toFixed(1) + ' m';
+  three.cables(pw, sockets);
+  for (const vis of [false, true]) {
+    const d = pw.pieces.filter(p => p.vis === vis).map(p => `M${p.a.x.toFixed(1)},${p.a.y.toFixed(1)}L${p.b.x.toFixed(1)},${p.b.y.toFixed(1)}`).join('');
+    if (d) el('path', { d, class: vis ? 'p-channel' : 'p-cable' }, g);
+  }
+  for (const c of pw.climbs) { const t = el('text', { x: c.at.x, y: c.at.y + (c.at.y < 20 ? 12 : -5), class: 'p-climb', 'text-anchor': 'middle' }, g); t.textContent = `↑${c.up}`; }
+  sockets.forEach((k, i) => el('circle', { cx: k.x, cy: k.y, r: 6, class: 'p-socket', 'data-sock': i }, g));
+  box.innerHTML = `<div class="card-head"><h2>Power</h2><span class="ro">${pw.plugs.length} things to plug in</span></div>
+    <div class="row"><span>Cable in total</span><b class="mono">${m(pw.cable)}</b></div>
+    <div class="row"><span>Of that in channels, where it shows</span><b class="mono">${m(pw.channel)}</b></div>
+    <div class="row"><span>Splitters or extension leads</span><b class="mono">${pw.splits}</b></div>
+    <div class="key"><span><i style="border-top:3px solid #E0701F"></i>channel</span><span><i style="border-top:1.5px dashed #5B6470"></i>cable, hidden</span><span>↑ cm of channel up the wall</span></div>
+    <ul class="keys"></ul>
+    <p class="empty">Drag the red sockets to where yours are. Double-click next to a wall to add one, double-click a socket to remove it.</p>`;
+  const ul = box.querySelector('ul');
+  const notes = [...pw.climbs.map(c => `${c.name}: ${c.up} cm of channel up the wall`), ...(pw.over ? [`${pw.over} cable${pw.over > 1 ? 's go' : ' goes'} up and over the door frame`] : []), ...(sockets.length ? [] : ['No sockets: double-click next to a wall to add one'])];
+  for (const n of notes) { const li = document.createElement('li'); li.textContent = n; ul.append(li); }
+  if (!notes.length) ul.remove();
+}
+$('#showPower').onchange = () => renderPlan();
+svg.addEventListener('dblclick', (e) => {
+  if (!$('#showPower').checked) return;
+  const p = svgPt(e), near = sockets.filter(k => Math.hypot(k.x - p.x, k.y - p.y) <= 10); // by position: a drag has captured the pointer, so the target is the plan
+  if (near.length) sockets = sockets.filter(k => !near.includes(k)); // also clears copies stacked on the same spot
+  else { const [d, s] = toWall(p.x, p.y); if (d > 25) return; const w = atWall(s); sockets.push({ x: Math.round(w.x), y: Math.round(w.y) }); }
+  store.set('room.sockets', sockets); renderPower();
+});
 
 // dragging
 let drag = null;
 function svgPt(e) { const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); }
 svg.addEventListener('pointerdown', (e) => {
+  const k = e.target.closest('.p-socket');
+  if (k) { dragSock = +k.dataset.sock; svg.setPointerCapture(e.pointerId); return; }
   const g = e.target.closest('.p-item');
   if (!g) { if (selId) { selId = null; renderEditor(); renderAll(); } return; }
   const it = items.find(i => i.id === g.dataset.id);
@@ -1021,12 +1192,14 @@ svg.addEventListener('pointerdown', (e) => {
   renderAll(false);
 });
 svg.addEventListener('pointermove', (e) => {
+  if (dragSock !== null) { const p = svgPt(e), w = atWall(toWall(p.x, p.y)[1]); sockets[dragSock] = { x: Math.round(w.x), y: Math.round(w.y) }; renderPower(); return; } // slides along the walls
   if (!drag) return;
   const p = svgPt(e);
   drag.it.x = Math.round(p.x + drag.dx); drag.it.y = Math.round(p.y + drag.dy);
   edited(); renderAll(false);
 });
 svg.addEventListener('pointerup', () => {
+  if (dragSock !== null) { dragSock = null; store.set('room.sockets', sockets); return; }
   if (!drag) return;
   snap(drag.it); drag = null; renderAll();
 });
@@ -1218,11 +1391,13 @@ document.addEventListener('keydown', (e) => {
 // ---------- 3D ----------
 const three = (() => {
   const host = $('#view3d');
-  if (!window.THREE) { host.innerHTML = '<p id="no3d">The 3D view could not load (no connection to the 3D library). The plan and checks still work.</p>'; return { sync() {} }; }
+  if (!window.THREE) { host.innerHTML = '<p id="no3d">The 3D view could not load (no connection to the 3D library). The plan and checks still work.</p>'; return { sync() {}, cables() {} }; }
   if (THREE.RectAreaLightUniformsLib) THREE.RectAreaLightUniformsLib.init(); // LED strips are area lights
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.xr.enabled = true;
+  const shell = []; // walls, floor, doors, windows, pendant: hidden in AR, where the real ones are
   host.append(renderer.domElement);
   const scene = new THREE.Scene();
   const cam = new THREE.PerspectiveCamera(55, 1, 5, 5000);
@@ -1281,23 +1456,23 @@ const three = (() => {
     const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(ROOM.w / 160, ROOM.d / 160); return t;
   })();
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), new THREE.MeshStandardMaterial({ map: floorTex, roughness: .6, metalness: 0 }));
-  floor.rotation.x = -Math.PI / 2; floor.position.set(ROOM.w / 2, 0, ROOM.d / 2); floor.receiveShadow = true; scene.add(floor);
+  floor.rotation.x = -Math.PI / 2; floor.position.set(ROOM.w / 2, 0, ROOM.d / 2); floor.receiveShadow = true; scene.add(floor); shell.push(floor);
   const wallMat = M('#F1EFEA');
   function wall(len, x, z, ry) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(len, ROOM.h), wallMat);
-    m.position.set(x, ROOM.h / 2, z); m.rotation.y = ry; m.receiveShadow = m.castShadow = true; scene.add(m);
+    m.position.set(x, ROOM.h / 2, z); m.rotation.y = ry; m.receiveShadow = m.castShadow = true; scene.add(m); shell.push(m);
   }
   wall(ROOM.w, ROOM.w / 2, 0, 0);                 // door wall
   { // window wall with real openings, so low sun and moonlight fall through the windows
     const sh = new THREE.Shape([[0, 0], [ROOM.w, 0], [ROOM.w, ROOM.h], [0, ROOM.h]].map(([u, v]) => new THREE.Vector2(u, v)));
     for (const [a, b] of WINDOWS) sh.holes.push(new THREE.Path([[ROOM.w - b, 100], [ROOM.w - a, 100], [ROOM.w - a, 228], [ROOM.w - b, 228]].map(([u, v]) => new THREE.Vector2(u, v))));
     const m = new THREE.Mesh(new THREE.ShapeGeometry(sh), wallMat);
-    m.rotation.y = Math.PI; m.position.set(ROOM.w, 0, ROOM.d); m.receiveShadow = m.castShadow = true; scene.add(m);
+    m.rotation.y = Math.PI; m.position.set(ROOM.w, 0, ROOM.d); m.receiveShadow = m.castShadow = true; scene.add(m); shell.push(m);
   }
   wall(ROOM.d, 0, ROOM.d / 2, Math.PI / 2);       // piano wall
   wall(ROOM.d, ROOM.w, ROOM.d / 2, -Math.PI / 2); // wardrobe wall
   function panel(w, h, x, y, z, ry, mat) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); m.position.set(x, y + h / 2, z); m.rotation.y = ry; scene.add(m); return m;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); m.position.set(x, y + h / 2, z); m.rotation.y = ry; scene.add(m); shell.push(m); return m;
   }
   const doorMat = M('#E6E1D5'), seam = M('#9C958A');
   panel(130, 221, 178, 0, 0.6, 0, doorMat); panel(1.5, 221, 178, 0, 0.8, 0, seam);
@@ -1314,9 +1489,9 @@ const three = (() => {
   // rattan pendant in the middle of the ceiling, like the render
   const rattan = new THREE.MeshStandardMaterial({ color: '#C9A56E', emissive: 0xffc27a, emissiveIntensity: .25, side: THREE.DoubleSide, roughness: .9 });
   rattan.userData.kind = 'pendant'; shades.add(rattan);
-  cyl(scene, .4, .4, 50, 178, ROOM.h - 50, 282, '#333', 6);
+  shell.push(cyl(scene, .4, .4, 50, 178, ROOM.h - 50, 282, '#333', 6));
   const pend = new THREE.Mesh(new THREE.SphereGeometry(22, 20, 12, 0, Math.PI * 2, 0, Math.PI * .62), rattan);
-  pend.position.set(178, ROOM.h - 58, 282); scene.add(pend);
+  pend.position.set(178, ROOM.h - 58, 282); scene.add(pend); shell.push(pend);
   addLight(scene, 'pendant', 0xffc27a, 900, 178, ROOM.h - 72, 282, true);
 
   // furniture builders: local x = width, z = depth (front is +z), y up. c = main finish, c2 = second finish
@@ -1369,15 +1544,22 @@ const three = (() => {
         box(g, Math.min(12, w / 5), 1.2, 1.4, 0, y + rh - 7, d / 2 + 1.6, sh(c, -.3));
       }
     },
-    // look: doors, drawers (a row at the bottom, or with stack a column under the last door), mirror = index of a mirrored door, legs
+    // look: doors, drawers (a row at the bottom, or with stack a column under door `under`, the last by default), mirror = index of a mirrored door, legs
     wardrobe(g, w, d, h, c, c2, it) {
-      const L = it.look || {}, n = L.doors || 2, legs = L.legs || 0, dr = L.drawers || 0, band = dr && !L.stack ? 22 : 0, dw = (w - 4) / n;
-      if (legs) for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(g, 4, legs, 4, sx * (w / 2 - 5), 0, sz * (d / 2 - 5), sh(c, -.15));
-      box(g, w, h - legs, d, 0, legs, 0, c);
-      if (L.stack) for (let k = 0; k < dr; k++) { box(g, dw - 1.5, 14, 1.2, w / 2 - 2 - dw / 2, legs + 3 + k * 16, d / 2 + .6, sh(c, .03)); box(g, 12, 1.2, 1.4, w / 2 - 2 - dw / 2, legs + 12 + k * 16, d / 2 + 1.6, sh(c, -.3)); }
+      const L = it.look || {}, n = L.doors || 2, legs = L.legs || 0, dr = L.drawers || 0, band = dr && !L.stack ? 22 : 0, dw = (w - 4) / n, u = L.under ?? n - 1, ux = -w / 2 + 2 + dw * (u + .5);
+      if (legs) for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(g, 4, legs, 4, sx * (w / 2 - 5), 0, sz * (d / 2 - 5), L.legc || sh(c, -.15));
+      if (L.open) { // carcass with an open cell above the drawer stack: walls around it, dark back, one shelf
+        const x0 = ux - dw / 2 + 1, x1 = ux + dw / 2 - 1, y0 = legs + dr * 16 + 2, y1 = h - 2, back = L.open === 1 ? sh(c, -.4) : L.open;
+        box(g, w, y0 - legs, d, 0, legs, 0, c); box(g, w, h - y1, d, 0, y1, 0, c);
+        box(g, x0 + w / 2, y1 - y0, d, (x0 - w / 2) / 2, y0, 0, c); box(g, w / 2 - x1, y1 - y0, d, (x1 + w / 2) / 2, y0, 0, c);
+        box(g, x1 - x0, y1 - y0, 2, ux, y0, -d / 2 + 1, back);
+        box(g, x1 - x0, 2, d - 3, ux, (y0 + y1) / 2, .5, c);
+      } else box(g, w, h - legs, d, 0, legs, 0, c);
+      if (L.stack) for (let k = 0; k < dr; k++) { box(g, dw - 1.5, 14, 1.2, ux, legs + 3 + k * 16, d / 2 + .6, sh(c, .03)); box(g, 12, 1.2, 1.4, ux, legs + 12 + k * 16, d / 2 + 1.6, sh(c, -.3)); }
       else for (let k = 0; k < dr; k++) box(g, (w - 4) / dr - 2, band - 3, 1.2, -w / 2 + 2 + (k + .5) * (w - 4) / dr, legs + 2, d / 2 + .6, sh(c, .03));
       for (let k = 0; k < n; k++) {
-        const x = -w / 2 + 2 + dw * (k + .5), mirror = k === L.mirror, low = L.stack && k === n - 1 ? dr * 16 : band;
+        const x = -w / 2 + 2 + dw * (k + .5), mirror = k === L.mirror, low = L.stack && k === u ? dr * 16 : band;
+        if (L.open && k === u) continue;
         box(g, dw - 1.5, h - legs - low - 5, 1.2, x, legs + low + 3, d / 2 + .6, mirror ? M('#DCE4E8', { roughness: .2, metalness: .05 }) : sh(c, .03));
         box(g, 1.6, 22, 2.5, x + (k < n / 2 ? dw / 2 - 5 : -dw / 2 + 5), legs + (h - legs) / 2 - 5, d / 2 + 1.5, sh(c, -.3));
       }
@@ -1589,8 +1771,28 @@ const three = (() => {
       if (L.shelf) for (let z = -d / 2 + 5; z <= d / 2 - 5; z += 5) box(g, w - 18, 1.5, 3, 0, 10, z, c);
     },
   };
-  B.kallax5 = B.kallax;
+  B.kallax5 = B.kallax; B.wardrobe_top = B.wardrobe;
   setMood();
+
+  // cables: orange channels (as on the plan) on the skirting and up the walls, thin dark cable behind furniture, red sockets
+  const cableG = new THREE.Group(); scene.add(cableG);
+  function cables(pw, sockets) {
+    cableG.traverse(o => o.geometry?.dispose()); cableG.clear();
+    if (!pw) return;
+    const CH = M('#E0701F', { emissive: 0x7a3000, emissiveIntensity: .35 }), CB = '#2E3238', segs = [];
+    for (const p of pw.pieces) { // join the 5 cm pieces into straight runs
+      const l = segs[segs.length - 1];
+      const straight = l && l.vis === p.vis && Math.hypot(l.b.x - p.a.x, l.b.y - p.a.y) < .01 && Math.abs((l.b.x - l.a.x) * (p.b.y - p.a.y) - (l.b.y - l.a.y) * (p.b.x - p.a.x)) < .01;
+      if (straight) l.b = p.b; else segs.push({ ...p });
+    }
+    for (const s of segs) if (Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) > .5) strut(cableG, [s.a.x, s.vis ? 2 : .6, s.a.y], [s.b.x, s.vis ? 2 : .6, s.b.y], s.vis ? 4 : 1.2, s.vis ? CH : CB);
+    for (const c of pw.climbs) strut(cableG, [c.at.x, c.from, c.at.y], [c.at.x, c.to, c.at.y], 4, CH);
+    if (pw.over) { // up the door frame, across the top, down the other side
+      for (const x of [DOOR.x0 - 4, DOOR.x1 + 4]) strut(cableG, [x, 0, 3], [x, 228, 3], 2.5, CH);
+      strut(cableG, [DOOR.x0 - 4, 228, 3], [DOOR.x1 + 4, 228, 3], 2.5, CH);
+    }
+    for (const k of sockets) { const side = k.x < 1 || k.x > ROOM.w - 1; box(cableG, side ? 3 : 8, 8, side ? 8 : 3, Math.min(ROOM.w - 1.5, Math.max(1.5, k.x)), 26, Math.min(ROOM.d - 1.5, Math.max(1.5, k.y)), '#D8262E'); }
+  }
 
   const groups = new Map();
   let sel = null;
@@ -1631,11 +1833,69 @@ const three = (() => {
     renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix();
   }
   new ResizeObserver(resize).observe(host);
-  function bg() { scene.background = new THREE.Color(MOODS[mood].bg || getComputedStyle(document.documentElement).getPropertyValue('--scene').trim() || '#E9EBE7'); }
+  function bg() { scene.background = renderer.xr.isPresenting ? null : new THREE.Color(MOODS[mood].bg || getComputedStyle(document.documentElement).getPropertyValue('--scene').trim() || '#E9EBE7'); }
   bg(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change', bg);
   new MutationObserver(bg).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-  (function loop() { ctl.update(); renderer.render(scene, cam); requestAnimationFrame(loop); })();
-  return { sync };
+
+  // AR: tap the two door-wall corners (AR_PTS), then the scene is scaled to metres and laid onto the real floor
+  const arUi = $('#arUi'), arMsg = $('#arMsg'), arBtn = $('#arBtn');
+  const reticle = new THREE.Mesh(new THREE.RingGeometry(.04, .06, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x2f9f94 }));
+  reticle.visible = false; scene.add(reticle);
+  let hitSrc = null, hit = null, taps = [], dyaw = 0, aligned = false, keepMood = mood, shadowed = [];
+  const STEPS = ['Tap the floor in the corner of the door wall and the piano wall', 'Now the corner of the door wall and the wardrobe wall'];
+  function arVis() { // before alignment only the reticle shows, after it the furniture without the room shell
+    const on = renderer.xr.isPresenting;
+    for (const o of scene.children) if (o !== reticle) o.visible = !on || (aligned && o !== sel && !shell.includes(o));
+  }
+  function place() {
+    const a = align(AR_PTS[0], AR_PTS[1], taps[0], taps[1], dyaw);
+    scene.scale.setScalar(.01); scene.rotation.set(0, a.yaw, 0); scene.position.set(a.pos.x, a.pos.y, a.pos.z);
+    aligned = true; arVis();
+    arMsg.textContent = `Corners ${(a.measured / 100).toFixed(2)} m apart, plan says ${(ROOM.w / 100).toFixed(2)} m. Way off? Redo.`;
+  }
+  function redo() {
+    taps = []; dyaw = 0; aligned = false;
+    scene.scale.setScalar(1); scene.rotation.set(0, 0, 0); scene.position.set(0, 0, 0);
+    arVis(); arMsg.textContent = STEPS[0];
+  }
+  const turn = (deg) => { dyaw += deg * Math.PI / 180; if (aligned) place(); };
+  navigator.xr?.isSessionSupported('immersive-ar').then(ok => arBtn.hidden = !ok).catch(() => {});
+  arBtn.onclick = async () => {
+    let s;
+    try { s = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay'], domOverlay: { root: arUi } }); }
+    catch (e) { flash(arBtn, 'AR failed'); return; }
+    arUi.hidden = false;
+    keepMood = mood; mood = 'day'; // evening/night lamps are tuned for cm, and the real room has its own light
+    scene.traverse(o => { if (o.isLight && o.castShadow) { o.castShadow = false; shadowed.push(o); } }); // shadow cameras are sized in cm
+    cam.near = .02; cam.far = 50; cam.updateProjectionMatrix();
+    renderer.xr.setReferenceSpaceType('local');
+    await renderer.xr.setSession(s);
+    hitSrc = await s.requestHitTestSource({ space: await s.requestReferenceSpace('viewer') });
+    setMood(); redo();
+    s.addEventListener('select', () => {
+      if (aligned || !hit) return;
+      taps.push(hit.clone());
+      if (taps.length === 2) place(); else arMsg.textContent = STEPS[1];
+    });
+    s.addEventListener('end', () => {
+      hitSrc = hit = null; arUi.hidden = true; reticle.visible = false;
+      mood = keepMood; for (const L of shadowed) L.castShadow = true; shadowed = [];
+      cam.near = 5; cam.far = 5000; cam.updateProjectionMatrix();
+      redo(); setMood();
+    });
+  };
+  arUi.addEventListener('beforexrselect', (e) => { if (e.target.closest('button')) e.preventDefault(); }); // a button press isn't a floor tap
+  $('#arRedo').onclick = redo; $('#arL').onclick = () => turn(.5); $('#arR').onclick = () => turn(-.5);
+  $('#arExit').onclick = () => renderer.xr.getSession()?.end();
+  function arFrame(frame) {
+    const r = hitSrc && frame.getHitTestResults(hitSrc)[0], p = r?.getPose(renderer.xr.getReferenceSpace())?.transform.position;
+    hit = p ? new THREE.Vector3(p.x, p.y, p.z) : null;
+    reticle.visible = !!hit && !aligned;
+    if (hit) reticle.position.copy(hit);
+  }
+
+  renderer.setAnimationLoop((t, frame) => { if (frame) arFrame(frame); else ctl.update(); renderer.render(scene, cam); });
+  return { sync, cables };
 })();
 
 // ---------- glue ----------

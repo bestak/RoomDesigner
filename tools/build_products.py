@@ -32,6 +32,7 @@ P = {
   10: (90, 48, 81, '#7A5A40', None, dict(drawers=3, legs=13, legc='#1F2124'), 'RÅDMANSÖ, ořech', ''),
   11: (82, 47, 90, '#B8956A', None, dict(drawers=4, legs=5), 'TONSTAD, dub', ''),
   12: (70, 40, 112, '#EEEEEA', None, dict(drawers=5), 'KULLEN, bílá', ''),
+  304: (70, 50, 75, '#D1B486', None, dict(drawers=3), 'STORKLINTA, dub', ''),
   105: (81, 48, 101, '#C4A88C', None, dict(drawers=4), 'LIMFJORDEN, světlý dub', ''),
   106: (81, 45, 102, '#CFA878', None, dict(drawers=4, legs=4), 'TRANUM, zlatý dub', ''),
   201: (80, 48, 77.5, '#B98E62', None, dict(drawers=3), 'MALM, dub', ''),
@@ -45,7 +46,13 @@ P = {
   108: (109, 61, 220, '#C8996B', None, dict(doors=2), 'LINTRUP, dub', ''),
   203: (120, 55, 195, '#EEEEEA', None, dict(doors=3, mirror=1), 'Karl (ASKO), bílá', ''),
   300: (97, 50, 176, '#CDB5A0', None, dict(doors=2, drawers=3, stack=1), 'FANDRUP, světlý dub', 'Three drawers under the right door.'),
+  301: (180, 58, 200, '#A8876D', None, dict(doors=3, drawers=3, stack=1, under=1), 'LIMFJORDEN, 3 dveře, divoký dub', 'Three drawers under the middle door.'),
+  302: (120, 58, 200, '#A8876D', None, dict(doors=2, drawers=3, stack=1, under=0), 'LIMFJORDEN, 2 dveře, divoký dub', 'Three drawers under the left door.'),
+  305: (118, 64, 190, '#6D563E', None, dict(doors=2, drawers=4, stack=1, under=1, open='#3B4650', legs=10, legc='#1F2124'), 'RÅDMANSÖ, ořech', 'One door, open shelves over four drawers.'),
+  306: (98, 57, 190, '#C5AA8C', None, dict(doors=2, drawers=2, stack=1, under=1), 'VILHATTEN, dub', 'Two drawers under the right door.'),
   204: (120, 58, 161, '#5A3A26', None, dict(doors=2, legs=10), 'Retro skříň, Rousínov', ''),
+  # wardrobe top units (sit on a wardrobe)
+  303: (97, 50, 41, '#CDB5A0', None, dict(doors=2), 'FANDRUP nástavec, světlý dub', 'Fits on top of the FANDRUP 97 cm wardrobe.'),
   # KALLAX-style shelving
   17: (147, 39, 147, '#EEEEEA', None, None, 'KALLAX 4×4, bílá', ''),
   18: (147, 39, 147, '#D2C2AC', None, None, 'KALLAX 4×4, bíle mořený dub', ''),
@@ -166,7 +173,7 @@ P = {
   # curtain divider
   76: (None, None, None, '#E9E2D2', None, None, 'VIDGA stropní kolejnice (2)', 'Rail only, the curtains are extra.'),
 }
-CAT = {'bed', 'nightstand', 'dresser', 'wardrobe', 'kallax', 'armchair', 'coffee', 'office', 'chair', 'lamp', 'table_lamp', 'plant', 'desk', 'shelf', 'bedbench', 'wallshelf', 'rug', 'screen', 'slats', 'curtain_div'}
+CAT = {'bed', 'nightstand', 'dresser', 'wardrobe', 'wardrobe_top', 'kallax', 'armchair', 'coffee', 'office', 'chair', 'lamp', 'table_lamp', 'plant', 'desk', 'shelf', 'bedbench', 'wallshelf', 'rug', 'screen', 'slats', 'curtain_div'}
 SHOP = lambda u: 'IKEA' if 'ikea.com' in u else 'JYSK' if 'jysk.cz' in u else 'Bazoš'
 out = {}
 for n, (w, d, h, c, c2, look, name, note) in P.items():
