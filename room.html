@@ -243,6 +243,7 @@ body.focus3d .pane{height:auto}
   </aside>
 </main>
 
+<script src="products.js"></script>
 <script id="core">
 // ---- room + furniture model (no DOM) ----
 const ROOM = { w: 356, d: 565, h: 287 };
@@ -374,7 +375,42 @@ const ACCENT = {
   accentBlue: { label: 'Oak + walnut · dusty blue & plants', ...MIXED, curtain: '#CDD5DC', win: ['linen', '#CDD5DC'], bedding: '#98A7B6', seat: '#A9B8C6', fabric: '#6F8296', rug2: '#7D8FA1', shade: '#F3E7CB', leaf: '#4A6B3F', pot: '#E9E2D2', plants: 5 },
   accentOlive: { label: 'Oak + walnut · olive', ...MIXED, curtain: '#D3D5BC', win: ['linen', '#D3D5BC'], bedding: '#9AA68A', seat: '#26282B', fabric: '#5F6B3E', rug2: '#7E8660', shade: '#F3E7CB', leaf: '#5D7A45', pot: '#E9E2D2', plants: 3 },
   accentClay: { label: 'Oak + walnut · olive & terracotta', ...MIXED, curtain: '#E6CDBB', win: ['linen', '#E6CDBB'], bedding: '#A7AE93', seat: '#26282B', fabric: '#76804F', rug2: '#A9573A', shade: '#F1E0C0', leaf: '#5D7A45', pot: '#B5613F', plants: 4 },
+  ...oliveVariants(),
 };
+// olive variants: same woods and neutral desk rug, only the amount and place of green changes.
+// bedding = RONJA (khaki) or HEDI (pale sage), DYTÅG = grey-olive linen curtains; colours sampled from the shop photos
+function oliveVariants() {
+  const base = { ...MIXED, rug1: '#9A9387', seat: '#26282B', shade: '#F3E7CB', leaf: '#5D7A45', pot: '#E9E2D2', plants: 3 };
+  const cream = ['linen', '#E9E2D2'], dytag = ['linen', '#7E816D'];
+  const sets = {
+    Ronja: { bedding: '#A39C8C', fabric: '#5F6B3E', rugs: ['#E6DCC8', '#E6DCC8', '#7E8660'] },
+    Hedi: { bedding: '#C0CEC3', fabric: '#4F665E', rugs: ['#CFC3AE', '#CFC3AE', '#8FA394'] },
+  };
+  const out = {};
+  for (const [bed, s] of Object.entries(sets)) [['neutral', cream], ['green curtains', dytag], ['full green', dytag]].forEach(([kind, win], i) => {
+    out[`olive${bed}${i}`] = { label: `Olive · ${bed.toUpperCase()} bedding · ${kind}`, ...base, win, curtain: win[1], bedding: s.bedding, fabric: s.fabric, rug2: s.rugs[i], ...(i === 2 && { plants: 5 }) };
+  });
+  return out;
+}
+// olive guide: accent = neutral room with green in 2–3 places; tonal = green almost everywhere, each item a different lightness
+const GUIDE = (() => {
+  const base = { ...MIXED, rug1: '#9E998C', seat: '#26282B', shade: '#F3E7CB', leaf: '#5D7A45', pot: '#E9E2D2', plants: 3 };
+  const linen = (c) => ['linen', c];
+  const v = [
+    ['Accent · green on the bed', linen('#E9E2D2'), '#9AA68A', '#D9CDB8', '#5F6B3E'],
+    ['Accent · green curtains', linen('#7E816D'), '#9AA68A', '#D9CDB8', '#D9CDB8'],
+    ['Accent · olive rug, rust armchair', linen('#E9E2D2'), '#9AA68A', '#7E8660', '#A9573A', { pot: '#B5613F' }],
+    ['Accent · sheers, forest armchair', ['sheer', '#FAF8F3'], '#C9CCB0', '#CFC3AE', '#4F5A34', { rug1: '#9A9387', plants: 5 }],
+    ['Accent · minimal, green only on the bed', linen('#E9E2D2'), '#9AA68A', '#E6DCC8', '#E9E2D2', { plants: 5 }],
+    ['Tonal · dark curtains (your screenshot)', linen('#4B4F31'), '#8A957A', '#6E7656', '#4F5A34'],
+    ['Tonal · dark curtains, lighter rug', linen('#4B4F31'), '#8A957A', '#A3AB8C', '#4F5A34'],
+    ['Tonal · light curtains', linen('#D3D5BC'), '#8A957A', '#6E7656', '#4F5A34'],
+    ['Tonal · khaki & moss', linen('#8C8456'), '#A39C8C', '#B7B08F', '#5B5F2E', { rug1: '#9A9387' }],
+    ['Tonal · dark rug, sage armchair', linen('#7E816D'), '#C9CCB0', '#4F5A34', '#8A957A'],
+  ];
+  return Object.fromEntries(v.map(([label, win, bedding, rug2, fabric, extra], i) =>
+    [`guide${i + 1}`, { ...base, label: `${i + 1} · ${label}`, win, curtain: win[1], bedding, rug2, fabric, ...extra }]));
+})();
 const WOODY = ['wallshelf', 'wardrobe', 'dresser', 'kallax', 'kallax5', 'coffee', 'chair', 'shelf', 'slats', 'screen', 'bedbench'];
 function themed(pal, list) {
   let rugs = 0;
@@ -391,13 +427,13 @@ function themed(pal, list) {
     else if (it.type === 'plant') { if (pal.leaf) it.color = pal.leaf; if (pal.pot) it.potc = pal.pot; }
   }
   const c = list.find(i => i.type === 'curtains');
-  if (c) Object.assign(c, { style: pal.win[0], color: pal.win[1] });
+  if (c) { if (!c.pick) Object.assign(c, { style: pal.win[0], color: pal.win[1] }); }
   else list.push(P('curtains', CURTAIN.x, ROOM.d, 0, { style: pal.win[0], color: pal.win[1] }));
   return list;
 }
 const STYLE_OF = {}; // preset name -> its own style key
 const styleKey = (pal) => Object.keys(PAL).find(k => PAL[k] === pal) || Object.keys(GEM).find(k => GEM[k] === pal);
-const palette = (k) => PAL[k] || GEM[k] || ACCENT[k];
+const palette = (k) => PAL[k] || GEM[k] || ACCENT[k] || GUIDE[k];
 // plants for a style: tried along the walls every 20 cm, at least 90 cm apart, kept only where they add no new problem or warning
 function greenery(list, n, pal) {
   const base = issues(list).length, placed = [], spots = [];
@@ -601,7 +637,27 @@ const A_VARIANTS = {
     P('kallax', 336.5, 420.5, 90), P('armchair', 250, 495, 200), P('coffee', 270, 425, 0, { name: 'Chess table', w: 55, d: 55, chess: true }), P('lamp', 300, 535),
   ],
 };
-const PRESETS = { ...BASE, ...A_VARIANTS, ...ZONED, ...GEMINI_VARIANTS, ...NEAR_DOOR };
+// the wardrobe + chest picked to buy, as real products on attempt 3 without the open shelf
+const PROD = new Map(Object.values(globalThis.window?.PRODUCTS || {}).flat().map(p => [p.id, p]));
+const buy = (it, id, y) => { const p = PROD.get(id); if (p) applyProduct(it, p); it.y = y; return it; };
+const SMALL_PLANT = (x, y, z) => P('plant', x, y, 0, { name: 'Small plant', w: 28, d: 28, h: 40, z, potc: '#E9E2D2' });
+function W_PICK(wardrobe, wy, chest, cy) {
+  const w = buy(P('wardrobe', 327, 0, 90), wardrobe, wy), b = aabb(w);
+  return [
+    ...PIANO_A(), P('desk_black', 40, 238.5, 270), P('office', 115, 238.5, 90), P('rug', 90, 238.5, 0, { w: 180, d: 186 }),
+    P('lamp', 19, 299, 0, { name: 'Table lamp', w: 22, d: 22, h: 42, z: 75 }),
+    P('desk_wood', 323.5, 70, 90), P('lamp', 338, 121, 0, { name: 'Table lamp', w: 22, d: 22, h: 42, z: 75 }),
+    w, SMALL_PLANT(w.x, b.y0 + 16, w.h), SMALL_PLANT(w.x, b.y1 - 16, w.h), buy(P('dresser', 332, 0, 90), chest, cy),
+    P('kallax', 73.5, 362, 0), ...A_BED(),
+    P('tv', 353, 469, 90, { z: 110 }), P('armchair', 304.5, 492, 135), P('coffee', 231, 523, 0, { name: 'Chess table', w: 55, d: 55, chess: true }),
+    P('lamp', 341, 550), P('rug', 242, 473, 0, { w: 178, d: 117 }),
+  ];
+}
+const PICKS = {
+  'W1 · VILHATTEN + ANKARUDDEN (IKEA)': W_PICK('ikea-306', 298, 'ikea-307', 387),
+  'W2 · Kaspian wardrobe + chest (BRW)': W_PICK('brw-308', 277, 'brw-309', 374.5),
+};
+const PRESETS = { ...BASE, ...A_VARIANTS, ...ZONED, ...GEMINI_VARIANTS, ...NEAR_DOOR, ...PICKS };
 
 // atmosphere: warm LED strips where they make sense, plus a table lamp on the dresser
 const LED = (x, y, rot, name, w, z, aim) => P('led', x, y, rot, { name, w, z, aim });
@@ -680,6 +736,7 @@ function applyProduct(it, p) {
   delete it.pick; delete it.look;
   if (!p) { Object.assign(it, it.base); delete it.base; }
   else Object.assign(it, { pick: p.id, name: p.name, w: s.w, d: s.d, h: s.h, color: p.color, color2: p.color2 ?? it.base.color2 }, p.look ? { look: p.look } : {});
+  if (T[it.type].fixed) return it; // window curtains hang from the window wall, they never move
   const b = aabb(it); // a bigger model that would go through a wall moves back into the room
   it.x += Math.max(0, -b.x0) - Math.max(0, b.x1 - ROOM.w); it.y += Math.max(0, -b.y0) - Math.max(0, b.y1 - ROOM.d);
   return it;
@@ -946,7 +1003,6 @@ function power(all, sockets) {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/lights/RectAreaLightUniformsLib.js"></script>
-<script src="products.js"></script>
 
 <script>
 const $ = (s) => document.querySelector(s);
@@ -965,7 +1021,7 @@ let items = withCurtains(cur.items), layoutKey = cur.key, style = cur.style || '
 // ---------- layout select / save / load ----------
 function fillSelect() {
   const s = $('#layoutSel'); s.innerHTML = '';
-  for (const [label, group] of [['Your plan and first ideas', BASE], ['Variations on A', A_VARIANTS], ['Zoned + feng shui', ZONED], ['Gemini render, trestle desk', GEMINI_VARIANTS], ['Mixed: desk by the window', NEAR_DOOR]]) {
+  for (const [label, group] of [['Your plan and first ideas', BASE], ['Variations on A', A_VARIANTS], ['Zoned + feng shui', ZONED], ['Gemini render, trestle desk', GEMINI_VARIANTS], ['Mixed: desk by the window', NEAR_DOOR], ['Wardrobe + chest picks', PICKS]]) {
     const g = document.createElement('optgroup'); g.label = label;
     for (const k of Object.keys(group)) g.append(new Option(k, 'p:' + k));
     s.append(g);
@@ -1032,7 +1088,7 @@ function persist() { store.set('room.current', { key: layoutKey, items, style })
 {
   const s = $('#styleSel');
   s.append(new Option("Layout's own colours", ''));
-  for (const [label, group] of [['Accent: blue or olive', ACCENT], ['Japandi & Scandi', GEM], ['More styles', PAL]]) {
+  for (const [label, group] of [['Olive guide: accent or tonal', GUIDE], ['Accent: blue or olive', ACCENT], ['Japandi & Scandi', GEM], ['More styles', PAL]]) {
     const g = document.createElement('optgroup'); g.label = label;
     for (const k in group) g.append(new Option(group[k].label.replace(/^./, c => c.toUpperCase()), k));
     s.append(g);
@@ -1232,7 +1288,7 @@ function renderEditor() {
     box.innerHTML = `<div class="card-head"><h2>Curtains</h2></div><div class="fields"><label class="wide">Style<select id="f-style">${Object.entries(CURTAIN_STYLES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label></div>`;
     $('#f-style').value = it.style || 'sheer';
     $('#f-style').onchange = (e) => { it.style = e.target.value; edited(); renderAll(); };
-    addSwatches(box, it); fillEditor(); return;
+    addSwatches(box, it); addProducts(box, it); fillEditor(); return;
   }
   box.innerHTML = `<div class="card-head"><h2>Selected item</h2><span class="ro">${T[it.type].name}</span></div><div class="fields"></div><div class="ro" id="farEdges"></div>
     <div class="btnrow"><button data-r="-90">⟲ 90°</button><button data-r="90">⟳ 90°</button><button data-r="-15">−15°</button><button data-r="15">+15°</button><button id="dupBtn">Duplicate</button><button id="rmBtn" class="danger">Remove</button></div>`;

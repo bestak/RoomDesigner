@@ -33,6 +33,8 @@ P = {
   11: (82, 47, 90, '#B8956A', None, dict(drawers=4, legs=5), 'TONSTAD, dub', ''),
   12: (70, 40, 112, '#EEEEEA', None, dict(drawers=5), 'KULLEN, bílá', ''),
   304: (70, 50, 75, '#D1B486', None, dict(drawers=3), 'STORKLINTA, dub', ''),
+  307: (80, 48, 107, '#CAAF87', None, dict(drawers=4), 'ANKARUDDEN, dub', ''),
+  309: (105, 40.5, 92, '#BEA684', None, dict(drawers=4), 'Kaspian KOM4S, dub mauvella', 'Same finish as the Kaspian wardrobe.'),
   105: (81, 48, 101, '#C4A88C', None, dict(drawers=4), 'LIMFJORDEN, světlý dub', ''),
   106: (81, 45, 102, '#CFA878', None, dict(drawers=4, legs=4), 'TRANUM, zlatý dub', ''),
   201: (80, 48, 77.5, '#B98E62', None, dict(drawers=3), 'MALM, dub', ''),
@@ -50,6 +52,7 @@ P = {
   302: (120, 58, 200, '#A8876D', None, dict(doors=2, drawers=3, stack=1, under=0), 'LIMFJORDEN, 2 dveře, divoký dub', 'Three drawers under the left door.'),
   305: (118, 64, 190, '#6D563E', None, dict(doors=2, drawers=4, stack=1, under=1, open='#3B4650', legs=10, legc='#1F2124'), 'RÅDMANSÖ, ořech', 'One door, open shelves over four drawers.'),
   306: (98, 57, 190, '#C5AA8C', None, dict(doors=2, drawers=2, stack=1, under=1), 'VILHATTEN, dub', 'Two drawers under the right door.'),
+  308: (90, 55.5, 200.5, '#BEA684', None, dict(doors=2, drawers=2), 'Kaspian SZF2D2S, dub mauvella', 'Rail space 85 × 148 cm over two full-width drawers.'),
   204: (120, 58, 161, '#5A3A26', None, dict(doors=2, legs=10), 'Retro skříň, Rousínov', ''),
   # wardrobe top units (sit on a wardrobe)
   303: (97, 50, 41, '#CDB5A0', None, dict(doors=2), 'FANDRUP nástavec, světlý dub', 'Fits on top of the FANDRUP 97 cm wardrobe.'),
@@ -172,9 +175,11 @@ P = {
   221: (131, None, 260, '#EEEEEA', None, None, 'Lamelová stěna, bílá', 'Needs a ceiling pole to stand (the seller includes one).'),
   # curtain divider
   76: (None, None, None, '#E9E2D2', None, None, 'VIDGA stropní kolejnice (2)', 'Rail only, the curtains are extra.'),
+  # window curtains: keep the planner's curtain size
+  310: (None, None, None, '#7E816D', None, None, 'DYTÅG, šedozelené', 'Linen, filters light. 145 × 300 cm per curtain, hem to fit.'),
 }
-CAT = {'bed', 'nightstand', 'dresser', 'wardrobe', 'wardrobe_top', 'kallax', 'armchair', 'coffee', 'office', 'chair', 'lamp', 'table_lamp', 'plant', 'desk', 'shelf', 'bedbench', 'wallshelf', 'rug', 'screen', 'slats', 'curtain_div'}
-SHOP = lambda u: 'IKEA' if 'ikea.com' in u else 'JYSK' if 'jysk.cz' in u else 'Bazoš'
+CAT = {'bed', 'nightstand', 'dresser', 'wardrobe', 'wardrobe_top', 'kallax', 'armchair', 'coffee', 'office', 'chair', 'lamp', 'table_lamp', 'plant', 'desk', 'shelf', 'bedbench', 'wallshelf', 'rug', 'screen', 'slats', 'curtain_div', 'curtains'}
+SHOP = lambda u: 'IKEA' if 'ikea.com' in u else 'JYSK' if 'jysk.cz' in u else 'BRW' if 'brwcz.cz' in u else 'Bazoš'
 out = {}
 for n, (w, d, h, c, c2, look, name, note) in P.items():
     r = src[n]; cat = r['cat']; assert cat in CAT, cat
@@ -191,11 +196,11 @@ for n, (w, d, h, c, c2, look, name, note) in P.items():
     if look: p['look'] = look
     if shop == 'Bazoš': note = (f"{r['loc'].strip()}. " + note).strip()
     if note: p['note'] = note
-    p['checked'] = '2026-09-29'
+    p['checked'] = r.get('checked', '2026-09-29')
     out.setdefault(cat, []).append(p)
-order = ['IKEA', 'JYSK', 'Bazoš']
+order = ['IKEA', 'JYSK', 'BRW', 'Bazoš']
 for k in out: out[k].sort(key=lambda p: order.index(p['shop']))
-js = '// Real products for the planner, one list per kind of piece. Generated from IKEA CZ, JYSK CZ and Bazoš (25 km around Prague) on 2026-09-29.\n'
+js = '// Real products for the planner, one list per kind of piece. Generated from IKEA CZ, JYSK CZ, BRW CZ and Bazoš (25 km around Prague); each product has its check date.\n'
 js += '// w = along the front, d = front to back, h = height (cm). color/color2/look drive the 3D model. Missing w/d/h keep the size of the piece it replaces.\n'
 js += 'window.PRODUCTS = {\n' + ''.join(f'  {k}: [\n' + ''.join('    ' + json.dumps(p, ensure_ascii=False) + ',\n' for p in v) + '  ],\n' for k, v in out.items()) + '};\n'
 open(sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, '..', 'products.js'), 'w').write(js)
